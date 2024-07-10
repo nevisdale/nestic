@@ -1,161 +1,296 @@
 package cpu
 
+import (
+	"fmt"
+	"strings"
+)
+
 type opcodeFunc func()
 
-// Load Accumulator - Copies data from memory into the accumulator register.
-func (c *CPU) lda() {}
-
-// Load X Register - Copies data from memory into the X register.
-func (c *CPU) ldx() {}
-
-// Load Y Register - Copies data from memory into the Y register.
-func (c *CPU) ldy() {}
-
-// Store Accumulator - Copies the contents of the accumulator into memory.
-func (c *CPU) sta() {}
-
-// Store X Register - Copies the contents of the X register into memory.
-func (c *CPU) stx() {}
-
-// Store Y Register - Copies the contents of the Y register into memory.
-func (c *CPU) sty() {}
-
-// Add with Carry - Adds the contents of a memory location to the accumulator (with carry).
+// Add with Carry
 func (c *CPU) adc() {}
 
-// Subtract with Carry - Subtracts the contents of a memory location from the accumulator (with borrow).
-func (c *CPU) sbc() {}
-
-// Compare Accumulator - Compares the accumulator with a memory location.
-func (c *CPU) cmp() {}
-
-// Compare X Register - Compares the X register with a memory location.
-func (c *CPU) cpx() {}
-
-// Compare Y Register - Compares the Y register with a memory location.
-func (c *CPU) cpy() {}
-
-// Logical AND - Performs a bitwise AND operation between the accumulator and a memory location.
+// Logical AND
 func (c *CPU) and() {}
 
-// Logical OR - Performs a bitwise OR operation between the accumulator and a memory location.
-func (c *CPU) ora() {}
-
-// Exclusive OR - Performs a bitwise exclusive OR operation between the accumulator and a memory location.
-func (c *CPU) eor() {}
-
-// Arithmetic Shift Left - Shifts the bits of the accumulator or a memory location to the left.
+// Arithmetic Shift Left
 func (c *CPU) asl() {}
 
-// Logical Shift Right - Shifts the bits of the accumulator or a memory location to the right.
-func (c *CPU) lsr() {}
-
-// Rotate Left - Rotates the bits of the accumulator or a memory location to the left through the carry flag.
-func (c *CPU) rol() {}
-
-// Rotate Right - Rotates the bits of the accumulator or a memory location to the right through the carry flag.
-func (c *CPU) ror() {}
-
-// Bit Test - Performs a bitwise AND between the accumulator and a memory location, setting flags but not storing the result.
-func (c *CPU) bit() {}
-
-// Jump - Transfers program execution to a different part of the program.
-func (c *CPU) jmp() {}
-
-// Jump to Subroutine - Jumps to a subroutine and saves the return address.
-func (c *CPU) jsr() {}
-
-// Return from Subroutine - Returns from a subroutine to the calling routine.
-func (c *CPU) rts() {}
-
-// Break - Initiates an interrupt request.
-func (c *CPU) brk() {}
-
-// Return from Interrupt - Returns from an interrupt routine.
-func (c *CPU) rti() {}
-
-// Branch if Carry Clear - Performs a conditional branch based on the carry flag.
+// Branch if Carry Clear
 func (c *CPU) bcc() {}
 
-// Branch if Carry Set - Performs a conditional branch based on the carry flag.
+// Branch if Carry Set
 func (c *CPU) bcs() {}
 
-// Branch if Equal - Performs a conditional branch based on the zero flag.
+// Branch if Equal
 func (c *CPU) beq() {}
 
-// Branch if Minus - Performs a conditional branch based on the negative flag.
+// Bit Test
+func (c *CPU) bit() {}
+
+// Branch if Minus
 func (c *CPU) bmi() {}
 
-// Branch if Not Equal - Performs a conditional branch based on the zero flag.
+// Branch if Not Equal
 func (c *CPU) bne() {}
 
-// Branch if Positive - Performs a conditional branch based on the negative flag.
+// Branch if Positive
 func (c *CPU) bpl() {}
 
-// Branch if Overflow Clear - Performs a conditional branch based on the overflow flag.
+// Force Interrupt
+func (c *CPU) brk() {}
+
+// Branch if Overflow Clear
 func (c *CPU) bvc() {}
 
-// Branch if Overflow Set - Performs a conditional branch based on the overflow flag.
+// Branch if Overflow Set
 func (c *CPU) bvs() {}
 
-// Clear Carry Flag - Resets the carry flag to 0.
+// Clear Carry Flag
 func (c *CPU) clc() {}
 
-// Set Carry Flag - Sets the carry flag to 1.
-func (c *CPU) sec() {}
-
-// Clear Decimal Mode - Resets the decimal mode flag to 0.
+// Clear Decimal Mode
 func (c *CPU) cld() {}
 
-// Set Decimal Mode - Sets the decimal mode flag to 1.
-func (c *CPU) sed() {}
-
-// Clear Interrupt Disable - Resets the interrupt disable flag to 0.
+// Clear Interrupt Disable
 func (c *CPU) cli() {}
 
-// Set Interrupt Disable - Sets the interrupt disable flag to 1.
-func (c *CPU) sei() {}
-
-// Clear Overflow Flag - Resets the overflow flag to 0.
+// Clear Overflow Flag
 func (c *CPU) clv() {}
 
-// No Operation - No operation is performed.
+// Compare
+func (c *CPU) cmp() {}
+
+// Compare X Register
+func (c *CPU) cpx() {}
+
+// Compare Y Register
+func (c *CPU) cpy() {}
+
+// Decrement Memory
+func (c *CPU) dec() {}
+
+// Decrement X Register
+func (c *CPU) dex() {}
+
+// Decrement Y Register
+func (c *CPU) dey() {}
+
+// Exclusive OR
+func (c *CPU) eor() {}
+
+// Increment Memory
+func (c *CPU) inc() {}
+
+// Increment X Register
+func (c *CPU) inx() {}
+
+// Increment Y Register
+func (c *CPU) iny() {}
+
+// Jump
+func (c *CPU) jmp() {}
+
+// Jump to Subroutine
+func (c *CPU) jsr() {}
+
+// Load Accumulator
+func (c *CPU) lda() {}
+
+// Load X Register
+func (c *CPU) ldx() {}
+
+// Load Y Register
+func (c *CPU) ldy() {}
+
+// Logical Shift Right
+func (c *CPU) lsr() {}
+
+// No Operation
 func (c *CPU) nop() {}
 
-// Transfer X to Accumulator - Copies the contents of the X register into the accumulator.
-func (c *CPU) txa() {}
+// Logical Inclusive OR
+func (c *CPU) ora() {}
 
-// Transfer Y to Accumulator - Copies the contents of the Y register into the accumulator.
-func (c *CPU) tya() {}
-
-// Transfer X to Stack Pointer - Copies the contents of the X register into the stack pointer.
-func (c *CPU) txs() {}
-
-// Transfer Accumulator to Y - Copies the contents of the accumulator into the Y register.
-func (c *CPU) tay() {}
-
-// Transfer Accumulator to X - Copies the contents of the accumulator into the X register.
-func (c *CPU) tax() {}
-
-// Transfer Stack Pointer to X - Copies the contents of the stack pointer into the X register.
-func (c *CPU) tsx() {}
-
-// Push Accumulator - Pushes the contents of the accumulator onto the stack.
+// Push Accumulator
 func (c *CPU) pha() {}
 
-// Push Processor Status (Flags) - Pushes the processor status (flags) onto the stack.
+// Push Processor Status
 func (c *CPU) php() {}
 
-// Pull Accumulator - Pulls the contents of the stack into the accumulator.
+// Pull Accumulator
 func (c *CPU) pla() {}
 
-// Pull Processor Status (Flags) - Pulls the processor status (flags) from the stack.
+// Pull Processor Status
 func (c *CPU) plp() {}
 
-// Unknown or unsupported opcode
-func (c *CPU) xxx() {}
+// Rotate Left
+func (c *CPU) rol() {}
+
+// Rotate Right
+func (c *CPU) ror() {}
+
+// Return from Interrupt
+func (c *CPU) rti() {}
+
+// Return from Subroutine
+func (c *CPU) rts() {}
+
+// Subtract with Carry
+func (c *CPU) sbc() {}
+
+// Set Carry Flag
+func (c *CPU) sec() {}
+
+// Set Decimal Flag
+func (c *CPU) sed() {}
+
+// Set Interrupt Disable
+func (c *CPU) sei() {}
+
+// Store Accumulator
+func (c *CPU) sta() {}
+
+// Store X Register
+func (c *CPU) stx() {}
+
+// Store Y Register
+func (c *CPU) sty() {}
+
+// Transfer Accumulator to X
+func (c *CPU) tax() {}
+
+// Transfer Accumulator to Y
+func (c *CPU) tay() {}
+
+// Transfer Stack Pointer to X
+func (c *CPU) tsx() {}
+
+// Transfer X to Accumulator
+func (c *CPU) txa() {}
+
+// Transfer X to Stack Pointer
+func (c *CPU) txs() {}
+
+// Transfer Y to Accumulator
+func (c *CPU) tya() {}
 
 func (c *CPU) opcodeFuncFromMnemonic(mnemonic string) (opcodeFunc, error) {
-	_ = mnemonic
-	return nil, nil
+	mnemonic = strings.ToUpper(mnemonic)
+	switch mnemonic {
+	case "ADC":
+		return c.adc, nil
+	case "AND":
+		return c.and, nil
+	case "ASL":
+		return c.asl, nil
+	case "BCC":
+		return c.bcc, nil
+	case "BCS":
+		return c.bcs, nil
+	case "BEQ":
+		return c.beq, nil
+	case "BIT":
+		return c.bit, nil
+	case "BMI":
+		return c.bmi, nil
+	case "BNE":
+		return c.bne, nil
+	case "BPL":
+		return c.bpl, nil
+	case "BRK":
+		return c.brk, nil
+	case "BVC":
+		return c.bvc, nil
+	case "BVS":
+		return c.bvs, nil
+	case "CLC":
+		return c.clc, nil
+	case "CLD":
+		return c.cld, nil
+	case "CLI":
+		return c.cli, nil
+	case "CLV":
+		return c.clv, nil
+	case "CMP":
+		return c.cmp, nil
+	case "CPX":
+		return c.cpx, nil
+	case "CPY":
+		return c.cpy, nil
+	case "DEC":
+		return c.dec, nil
+	case "DEX":
+		return c.dex, nil
+	case "DEY":
+		return c.dey, nil
+	case "EOR":
+		return c.eor, nil
+	case "INC":
+		return c.inc, nil
+	case "INX":
+		return c.inx, nil
+	case "INY":
+		return c.iny, nil
+	case "JMP":
+		return c.jmp, nil
+	case "JSR":
+		return c.jsr, nil
+	case "LDA":
+		return c.lda, nil
+	case "LDX":
+		return c.ldx, nil
+	case "LDY":
+		return c.ldy, nil
+	case "LSR":
+		return c.lsr, nil
+	case "NOP":
+		return c.nop, nil
+	case "ORA":
+		return c.ora, nil
+	case "PHA":
+		return c.pha, nil
+	case "PHP":
+		return c.php, nil
+	case "PLA":
+		return c.pla, nil
+	case "PLP":
+		return c.plp, nil
+	case "ROL":
+		return c.rol, nil
+	case "ROR":
+		return c.ror, nil
+	case "RTI":
+		return c.rti, nil
+	case "RTS":
+		return c.rts, nil
+	case "SBC":
+		return c.sbc, nil
+	case "SEC":
+		return c.sec, nil
+	case "SED":
+		return c.sed, nil
+	case "SEI":
+		return c.sei, nil
+	case "STA":
+		return c.sta, nil
+	case "STX":
+		return c.stx, nil
+	case "STY":
+		return c.sty, nil
+	case "TAX":
+		return c.tax, nil
+	case "TAY":
+		return c.tay, nil
+	case "TSX":
+		return c.tsx, nil
+	case "TXA":
+		return c.txa, nil
+	case "TXS":
+		return c.txs, nil
+	case "TYA":
+		return c.tya, nil
+	default:
+		return nil, fmt.Errorf("unknown mnemonic: %s", mnemonic)
+	}
 }

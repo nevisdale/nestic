@@ -1,9 +1,5 @@
 package cpu
 
-import (
-	"encoding/csv"
-)
-
 type ReadWriter interface {
 	Read(addr uint16, readOnly bool) uint8
 	Write(addr uint16, data uint8)
@@ -52,10 +48,15 @@ type CPU struct {
 	instructions []instruction
 }
 
-// must be in following format:
-// opcode, mnemonic, address mode, cycles
-func (c *CPU) SetInstructionFromCsv(r csv.Reader) error {
-	return nil
+func NewCPU() (*CPU, error) {
+	c := &CPU{
+		sp:           0xff,
+		instructions: make([]instruction, 0x100),
+	}
+	if err := c.parseOpcodeMatrix(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func (c CPU) read(addr uint16) uint8 {
