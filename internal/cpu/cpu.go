@@ -48,12 +48,12 @@ type CPU struct {
 	// Position in the slice is opcode.
 	instructions []instruction
 
-	fetched      uint8
-	addrAbs      uint16
-	addrRel      uint16
-	opcode       uint8
-	cycles       uint8
-	clockCounter uint64
+	fetched    uint8
+	addrAbs    uint16
+	addrRel    uint16
+	opcode     uint8
+	cycles     uint8
+	ticCounter uint64
 }
 
 func NewCPU() (*CPU, error) {
