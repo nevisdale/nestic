@@ -11,7 +11,17 @@ type opcodeFunc func() uint8
 func (c *CPU) adc() uint8 { return 0 }
 
 // Logical AND
-func (c *CPU) and() uint8 { return 0 }
+func (c *CPU) and() uint8 {
+	operand := c.fetch()
+	c.regA &= operand
+
+	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	c.setFlag(flagZBit, c.regA == 0)
+
+	// if the operation crosses a page boundary, we need to add 1 cycle
+	// an addicional cycle will be returned from the address mode above
+	return 1
+}
 
 // Arithmetic Shift Left
 func (c *CPU) asl() uint8 { return 0 }
@@ -20,37 +30,123 @@ func (c *CPU) asl() uint8 { return 0 }
 func (c *CPU) bcc() uint8 { return 0 }
 
 // Branch if Carry Set
-func (c *CPU) bcs() uint8 { return 0 }
+func (c *CPU) bcs() uint8 {
+	// we need to increase cycles here, because
+	// REL address mode does not increase cycles inside
+	// it applies for all branch instructions
+	if c.getFlag(flagCBit) {
+		c.cycles++
+		c.addrAbs = c.pc + c.addrRel
+		// different pages
+		if c.addrAbs&0xFF00 != c.pc&0xFF00 {
+			c.cycles++
+		}
+		c.pc = c.addrAbs
+	}
+	return 0
+}
 
 // Branch if Equal
-func (c *CPU) beq() uint8 { return 0 }
+func (c *CPU) beq() uint8 {
+	if c.getFlag(flagZBit) {
+		c.cycles++
+		c.addrAbs = c.pc + c.addrRel
+		// different pages
+		if c.addrAbs&0xFF00 != c.pc&0xFF00 {
+			c.cycles++
+		}
+		c.pc = c.addrAbs
+	}
+	return 0
+}
 
 // Bit Test
 func (c *CPU) bit() uint8 { return 0 }
 
 // Branch if Minus
-func (c *CPU) bmi() uint8 { return 0 }
+func (c *CPU) bmi() uint8 {
+	if c.getFlag(flagNBit) {
+		c.cycles++
+		c.addrAbs = c.pc + c.addrRel
+		// different pages
+		if c.addrAbs&0xFF00 != c.pc&0xFF00 {
+			c.cycles++
+		}
+		c.pc = c.addrAbs
+	}
+	return 0
+}
 
 // Branch if Not Equal
-func (c *CPU) bne() uint8 { return 0 }
+func (c *CPU) bne() uint8 {
+	if !c.getFlag(flagZBit) {
+		c.cycles++
+		c.addrAbs = c.pc + c.addrRel
+		// different pages
+		if c.addrAbs&0xFF00 != c.pc&0xFF00 {
+			c.cycles++
+		}
+		c.pc = c.addrAbs
+	}
+	return 0
+}
 
 // Branch if Positive
-func (c *CPU) bpl() uint8 { return 0 }
+func (c *CPU) bpl() uint8 {
+	if !c.getFlag(flagNBit) {
+		c.cycles++
+		c.addrAbs = c.pc + c.addrRel
+		// different pages
+		if c.addrAbs&0xFF00 != c.pc&0xFF00 {
+			c.cycles++
+		}
+		c.pc = c.addrAbs
+	}
+	return 0
+}
 
 // Force Interrupt
 func (c *CPU) brk() uint8 { return 0 }
 
 // Branch if Overflow Clear
-func (c *CPU) bvc() uint8 { return 0 }
+func (c *CPU) bvc() uint8 {
+	if !c.getFlag(flagVBit) {
+		c.cycles++
+		c.addrAbs = c.pc + c.addrRel
+		// different pages
+		if c.addrAbs&0xFF00 != c.pc&0xFF00 {
+			c.cycles++
+		}
+		c.pc = c.addrAbs
+	}
+	return 0
+}
 
 // Branch if Overflow Set
-func (c *CPU) bvs() uint8 { return 0 }
+func (c *CPU) bvs() uint8 {
+	if c.getFlag(flagVBit) {
+		c.cycles++
+		c.addrAbs = c.pc + c.addrRel
+		// different pages
+		if c.addrAbs&0xFF00 != c.pc&0xFF00 {
+			c.cycles++
+		}
+		c.pc = c.addrAbs
+	}
+	return 0
+}
 
 // Clear Carry Flag
-func (c *CPU) clc() uint8 { return 0 }
+func (c *CPU) clc() uint8 {
+	c.setFlag(flagCBit, false)
+	return 0
+}
 
 // Clear Decimal Mode
-func (c *CPU) cld() uint8 { return 0 }
+func (c *CPU) cld() uint8 {
+	c.setFlag(flagDBit, false)
+	return 0
+}
 
 // Clear Interrupt Disable
 func (c *CPU) cli() uint8 { return 0 }

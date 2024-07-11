@@ -95,7 +95,14 @@ func (c *CPU) Tic() {
 	cycleCount1 := c.doAddressMode(inst.addrMode)
 	cycleCount2 := inst.operate()
 
-	c.cycles = inst.cycles + cycleCount1 + cycleCount2
+	// we might have an additional cycle from the address mode
+	// and from operation itself.
+	// but if operation does not have an additional cycle, we should not add it.
+	// in simple words, we need to add an additional cycle only if both address mode and operation have it.
+	//
+	// example:
+	//  AND has 1 additional cycle if the operation crosses a page boundary.
+	c.cycles = inst.cycles + (cycleCount1 & cycleCount2)
 }
 
 // TODO: may merge all Reset, IRQ, NMI into one function?
@@ -110,6 +117,11 @@ func (c *CPU) IRQ() {}
 // non-maskable interrupt request signal
 func (c *CPU) NMI() {}
 
+// fetch is used to read data from memory.
+// do not use it when operation uses address for jump or branch.
 func (c *CPU) fetch() uint8 {
-	return 0
+	if am := c.instructions[c.opcode].addrMode; am != addrModeIMP && am != addrModeACC {
+		c.fetched = c.bus.Read8(c.addrAbs)
+	}
+	return c.fetched
 }
