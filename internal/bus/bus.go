@@ -1,5 +1,7 @@
 package bus
 
+import "github.com/nevisdale/nestic/internal/cpu"
+
 const (
 	// Detailed Memory Map:
 	//
@@ -42,17 +44,28 @@ const (
 )
 
 type Bus struct {
-	// devices
-	//
-	// cpu
-
 	ram [ramSizeBytes]uint8
+
+	cpu *cpu.CPU
 }
 
-func (b Bus) Read(addr uint16, readOnly bool) uint8 {
+func NewBus() *Bus {
+	return &Bus{}
+}
+
+func (b *Bus) ConnectCPU(cpu *cpu.CPU) {
+	cpu.ConnectBus(b)
+	b.cpu = cpu
+}
+
+func (b Bus) Read8(addr uint16) uint8 {
 	return b.ram[addr]
 }
 
-func (b Bus) Write(addr uint16, data uint8) {
+func (b Bus) Read16(addr uint16) uint16 {
+	return uint16(b.ram[addr]) | uint16(b.ram[addr+1])<<8
+}
+
+func (b Bus) Write8(addr uint16, data uint8) {
 	b.ram[addr] = data
 }

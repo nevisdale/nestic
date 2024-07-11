@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/nevisdale/nestic/internal/bus"
 	"github.com/nevisdale/nestic/internal/cpu"
 )
 
@@ -14,5 +15,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	_ = cpu
+	bus := bus.NewBus()
+	bus.ConnectCPU(cpu)
 }

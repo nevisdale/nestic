@@ -1,8 +1,9 @@
 package cpu
 
 type ReadWriter interface {
-	Read(addr uint16, readOnly bool) uint8
-	Write(addr uint16, data uint8)
+	Read8(addr uint16) uint8
+	Read16(addr uint16) uint16
+	Write8(addr uint16, data uint8)
 }
 
 const (
@@ -59,12 +60,8 @@ func NewCPU() (*CPU, error) {
 	return c, nil
 }
 
-func (c CPU) read(addr uint16) uint8 {
-	return c.bus.Read(addr, true)
-}
-
-func (c *CPU) write(addr uint16, data uint8) {
-	c.bus.Write(addr, data)
+func (c *CPU) ConnectBus(bus ReadWriter) {
+	c.bus = bus
 }
 
 func (c CPU) getFlag(flag uint8) bool {
