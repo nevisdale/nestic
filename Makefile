@@ -1,5 +1,5 @@
 LOCAL_BIN=$(CURDIR)/bin
-OUT_NAME=nes-emulator
+OUT_NAME=nestic
 
 
 .PHONY: .bindeps

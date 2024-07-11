@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/nevisdale/nes-emulator/internal/cpu"
+	"github.com/nevisdale/nestic/internal/cpu"
 )
 
 func main() {
