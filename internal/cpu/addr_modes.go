@@ -22,15 +22,6 @@ const (
 	// Format: $nn, where $nn is the address within the first 256 bytes of memory (zero page).
 	addrModeZP addrMode = "ZP"
 
-	// Absolute: ABS
-	//
-	// Description: In this mode, the operand points to a specific address in the NES memory,
-	// which can be anywhere within the 64 KB address space.
-	// For example, LDA $1234 loads the accumulator (A) from address $1234.
-	//
-	// Format: $nnnn, where $nnnn is the full 16-bit memory address.
-	addrModeABS addrMode = "ABS"
-
 	// Zero Page Indexed with X: ZPX
 	//
 	// Description: In this mode, the operand is located in the zero page of memory,
@@ -52,6 +43,15 @@ const (
 	// Format: $nn,Y, where $nn is an address within the first 256 bytes of memory (zero page),
 	// and Y is added to this address.
 	addrModeZPY addrMode = "ZPY"
+
+	// Absolute: ABS
+	//
+	// Description: In this mode, the operand points to a specific address in the NES memory,
+	// which can be anywhere within the 64 KB address space.
+	// For example, LDA $1234 loads the accumulator (A) from address $1234.
+	//
+	// Format: $nnnn, where $nnnn is the full 16-bit memory address.
+	addrModeABS addrMode = "ABS"
 
 	// Absolute Indexed with X: ABSX
 	//
@@ -151,12 +151,12 @@ func addrModeFromString(s string) (addrMode, error) {
 		return addrModeIMM, nil
 	case string(addrModeZP):
 		return addrModeZP, nil
-	case string(addrModeABS):
-		return addrModeABS, nil
 	case string(addrModeZPX):
 		return addrModeZPX, nil
 	case string(addrModeZPY):
 		return addrModeZPY, nil
+	case string(addrModeABS):
+		return addrModeABS, nil
 	case string(addrModeABSX):
 		return addrModeABSX, nil
 	case string(addrModeABSY):
@@ -175,4 +175,129 @@ func addrModeFromString(s string) (addrMode, error) {
 		return addrModeIMP, nil
 	}
 	return addrMode("UNKNOWN"), fmt.Errorf("address mode couldn't be parsed from %s", s)
+}
+
+// TODO: it is just a prototype for testing purposes
+func (c *CPU) doAddressMode(addrMode addrMode) uint8 {
+	switch addrMode {
+	case addrModeIMM:
+		c.addrAbs = c.pc
+		c.pc++
+		return 0
+
+	case addrModeZP:
+		c.addrAbs = uint16(c.bus.Read8(c.pc))
+		c.addrAbs &= 0x00FF
+		c.pc++
+		return 0
+
+	case addrModeZPX:
+		c.addrAbs = uint16(c.bus.Read8(c.pc) + c.regX)
+		c.addrAbs &= 0x00FF
+		c.pc++
+		return 0
+
+	case addrModeZPY:
+		c.addrAbs = uint16(c.bus.Read8(c.pc) + c.regY)
+		c.addrAbs &= 0x00FF
+		c.pc++
+		return 0
+
+	case addrModeABS:
+		c.addrAbs = uint16(c.bus.Read16(c.pc))
+		c.pc += 2
+		return 0
+
+	case addrModeABSX:
+		baseAddr := uint16(c.bus.Read16(c.pc))
+		c.pc += 2
+		c.addrAbs = baseAddr + uint16(c.regX)
+
+		// if baseAddr points to a different page than c.addrAbs, return 1
+		// page number is the high byte of the address
+		// for example: 0x1234, 0x12 is the page number
+		if (baseAddr & 0xFF00) != (c.addrAbs & 0xFF00) {
+			return 1
+		}
+		return 0
+
+	case addrModeABSY:
+		baseAddr := uint16(c.bus.Read16(c.pc))
+		c.pc += 2
+		c.addrAbs = baseAddr + uint16(c.regY)
+
+		// if baseAddr points to a different page than c.addrAbs, return 1
+		// page number is the high byte of the address
+		// for example: 0x1234, 0x12 is the page number
+		if (baseAddr & 0xFF00) != (c.addrAbs & 0xFF00) {
+			return 1
+		}
+		return 0
+
+	// 0x00ff bug bevare
+	// only JMP instruction uses this mode
+	case addrModeIND:
+		c.addrAbs = c.bus.Read16(c.pc)
+		c.pc += 2
+
+		// simulate 6502 page boundary hardware bug
+		//
+		// if the address is 0x00FF, the low byte is 0xFF and the high byte is 0x00
+		addrHi := (c.addrAbs & 0xFF00) | (c.addrAbs&0x00FF + 1)
+		c.addrAbs = uint16(c.bus.Read8(c.addrAbs)) | uint16(c.bus.Read8(addrHi))<<8
+		return 0
+
+	case addrModeINDX:
+		addr := uint16(c.bus.Read8(c.pc)) + uint16(c.regX)
+		c.pc++
+
+		// addr is 0x00FF
+		// X is 0x0
+		// loAddr is 0x00FF
+		// hiAddr is 0x0000 (0x00FF + 1 & 0x00FF = 0x0000)
+		lo := uint16(c.bus.Read8(addr & 0x00FF))
+		hi := uint16(c.bus.Read8((addr + 1) & 0x00FF))
+		c.addrAbs = lo | hi<<8
+		return 0
+
+	case addrModeINDY:
+		addr := uint16(c.bus.Read8(c.pc)) & 0x00FF
+		c.pc++
+
+		lo := uint16(c.bus.Read8(addr))
+		hi := uint16(c.bus.Read8((addr + 1) & 0x00FF))
+		c.addrAbs = lo | hi<<8
+		c.addrAbs += uint16(c.regY)
+
+		// return 1 if page boundary is crossed
+		// page number is the high byte of the address
+		// example: 0x1234, 0x12 is the page number
+		if c.addrAbs>>8 != hi {
+			return 1
+		}
+		return 0
+
+	case addrModeREL:
+		c.addrRel = uint16(c.bus.Read8(c.pc))
+		c.pc++
+
+		// if negative, add leading 1 bits to save the sign
+		//
+		// 0x80 is 1000_0000 in binary. it means the number (8bit) is negative
+		if c.addrRel&0x80 > 0 {
+			c.addrRel |= 0xFF00
+		}
+		return 0
+
+	case addrModeACC:
+		// TODO: should we do nothing here?
+		c.fetched = c.regA
+		return 0
+
+	case addrModeIMP:
+		// TODO: should we do nothing here?
+		c.fetched = c.regA
+		return 0
+	}
+	panic("unknown address mode")
 }

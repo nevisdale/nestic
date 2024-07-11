@@ -19,7 +19,7 @@ const (
 
 type instruction struct {
 	name     string
-	operate  func()
+	operate  opcodeFunc
 	addrMode addrMode
 	cycles   uint8
 }
@@ -47,6 +47,13 @@ type CPU struct {
 	//
 	// Position in the slice is opcode.
 	instructions []instruction
+
+	fetched      uint8
+	addrAbs      uint16
+	addrRel      uint16
+	opcode       uint8
+	cycles       uint8
+	clockCounter uint64
 }
 
 func NewCPU() (*CPU, error) {
@@ -74,4 +81,35 @@ func (c *CPU) setFlag(flag uint8, v bool) {
 		return
 	}
 	c.status &= ^flag
+}
+
+func (c *CPU) Tic() {
+	if c.cycles != 0 {
+		c.cycles--
+		return
+	}
+
+	c.opcode = c.bus.Read8(c.pc)
+	c.pc++
+	inst := c.instructions[c.opcode]
+	cycleCount1 := c.doAddressMode(inst.addrMode)
+	cycleCount2 := inst.operate()
+
+	c.cycles = inst.cycles + cycleCount1 + cycleCount2
+}
+
+// TODO: may merge all Reset, IRQ, NMI into one function?
+//
+// reset the CPU to its initial state
+func (c *CPU) Reset() {
+}
+
+// interrupt request signal
+func (c *CPU) IRQ() {}
+
+// non-maskable interrupt request signal
+func (c *CPU) NMI() {}
+
+func (c *CPU) fetch() uint8 {
+	return 0
 }

@@ -5,175 +5,175 @@ import (
 	"strings"
 )
 
-type opcodeFunc func()
+type opcodeFunc func() uint8
 
 // Add with Carry
-func (c *CPU) adc() {}
+func (c *CPU) adc() uint8 { return 0 }
 
 // Logical AND
-func (c *CPU) and() {}
+func (c *CPU) and() uint8 { return 0 }
 
 // Arithmetic Shift Left
-func (c *CPU) asl() {}
+func (c *CPU) asl() uint8 { return 0 }
 
 // Branch if Carry Clear
-func (c *CPU) bcc() {}
+func (c *CPU) bcc() uint8 { return 0 }
 
 // Branch if Carry Set
-func (c *CPU) bcs() {}
+func (c *CPU) bcs() uint8 { return 0 }
 
 // Branch if Equal
-func (c *CPU) beq() {}
+func (c *CPU) beq() uint8 { return 0 }
 
 // Bit Test
-func (c *CPU) bit() {}
+func (c *CPU) bit() uint8 { return 0 }
 
 // Branch if Minus
-func (c *CPU) bmi() {}
+func (c *CPU) bmi() uint8 { return 0 }
 
 // Branch if Not Equal
-func (c *CPU) bne() {}
+func (c *CPU) bne() uint8 { return 0 }
 
 // Branch if Positive
-func (c *CPU) bpl() {}
+func (c *CPU) bpl() uint8 { return 0 }
 
 // Force Interrupt
-func (c *CPU) brk() {}
+func (c *CPU) brk() uint8 { return 0 }
 
 // Branch if Overflow Clear
-func (c *CPU) bvc() {}
+func (c *CPU) bvc() uint8 { return 0 }
 
 // Branch if Overflow Set
-func (c *CPU) bvs() {}
+func (c *CPU) bvs() uint8 { return 0 }
 
 // Clear Carry Flag
-func (c *CPU) clc() {}
+func (c *CPU) clc() uint8 { return 0 }
 
 // Clear Decimal Mode
-func (c *CPU) cld() {}
+func (c *CPU) cld() uint8 { return 0 }
 
 // Clear Interrupt Disable
-func (c *CPU) cli() {}
+func (c *CPU) cli() uint8 { return 0 }
 
 // Clear Overflow Flag
-func (c *CPU) clv() {}
+func (c *CPU) clv() uint8 { return 0 }
 
 // Compare
-func (c *CPU) cmp() {}
+func (c *CPU) cmp() uint8 { return 0 }
 
 // Compare X Register
-func (c *CPU) cpx() {}
+func (c *CPU) cpx() uint8 { return 0 }
 
 // Compare Y Register
-func (c *CPU) cpy() {}
+func (c *CPU) cpy() uint8 { return 0 }
 
 // Decrement Memory
-func (c *CPU) dec() {}
+func (c *CPU) dec() uint8 { return 0 }
 
 // Decrement X Register
-func (c *CPU) dex() {}
+func (c *CPU) dex() uint8 { return 0 }
 
 // Decrement Y Register
-func (c *CPU) dey() {}
+func (c *CPU) dey() uint8 { return 0 }
 
 // Exclusive OR
-func (c *CPU) eor() {}
+func (c *CPU) eor() uint8 { return 0 }
 
 // Increment Memory
-func (c *CPU) inc() {}
+func (c *CPU) inc() uint8 { return 0 }
 
 // Increment X Register
-func (c *CPU) inx() {}
+func (c *CPU) inx() uint8 { return 0 }
 
 // Increment Y Register
-func (c *CPU) iny() {}
+func (c *CPU) iny() uint8 { return 0 }
 
 // Jump
-func (c *CPU) jmp() {}
+func (c *CPU) jmp() uint8 { return 0 }
 
 // Jump to Subroutine
-func (c *CPU) jsr() {}
+func (c *CPU) jsr() uint8 { return 0 }
 
 // Load Accumulator
-func (c *CPU) lda() {}
+func (c *CPU) lda() uint8 { return 0 }
 
 // Load X Register
-func (c *CPU) ldx() {}
+func (c *CPU) ldx() uint8 { return 0 }
 
 // Load Y Register
-func (c *CPU) ldy() {}
+func (c *CPU) ldy() uint8 { return 0 }
 
 // Logical Shift Right
-func (c *CPU) lsr() {}
+func (c *CPU) lsr() uint8 { return 0 }
 
 // No Operation
-func (c *CPU) nop() {}
+func (c *CPU) nop() uint8 { return 0 }
 
 // Logical Inclusive OR
-func (c *CPU) ora() {}
+func (c *CPU) ora() uint8 { return 0 }
 
 // Push Accumulator
-func (c *CPU) pha() {}
+func (c *CPU) pha() uint8 { return 0 }
 
 // Push Processor Status
-func (c *CPU) php() {}
+func (c *CPU) php() uint8 { return 0 }
 
 // Pull Accumulator
-func (c *CPU) pla() {}
+func (c *CPU) pla() uint8 { return 0 }
 
 // Pull Processor Status
-func (c *CPU) plp() {}
+func (c *CPU) plp() uint8 { return 0 }
 
 // Rotate Left
-func (c *CPU) rol() {}
+func (c *CPU) rol() uint8 { return 0 }
 
 // Rotate Right
-func (c *CPU) ror() {}
+func (c *CPU) ror() uint8 { return 0 }
 
 // Return from Interrupt
-func (c *CPU) rti() {}
+func (c *CPU) rti() uint8 { return 0 }
 
 // Return from Subroutine
-func (c *CPU) rts() {}
+func (c *CPU) rts() uint8 { return 0 }
 
 // Subtract with Carry
-func (c *CPU) sbc() {}
+func (c *CPU) sbc() uint8 { return 0 }
 
 // Set Carry Flag
-func (c *CPU) sec() {}
+func (c *CPU) sec() uint8 { return 0 }
 
 // Set Decimal Flag
-func (c *CPU) sed() {}
+func (c *CPU) sed() uint8 { return 0 }
 
 // Set Interrupt Disable
-func (c *CPU) sei() {}
+func (c *CPU) sei() uint8 { return 0 }
 
 // Store Accumulator
-func (c *CPU) sta() {}
+func (c *CPU) sta() uint8 { return 0 }
 
 // Store X Register
-func (c *CPU) stx() {}
+func (c *CPU) stx() uint8 { return 0 }
 
 // Store Y Register
-func (c *CPU) sty() {}
+func (c *CPU) sty() uint8 { return 0 }
 
 // Transfer Accumulator to X
-func (c *CPU) tax() {}
+func (c *CPU) tax() uint8 { return 0 }
 
 // Transfer Accumulator to Y
-func (c *CPU) tay() {}
+func (c *CPU) tay() uint8 { return 0 }
 
 // Transfer Stack Pointer to X
-func (c *CPU) tsx() {}
+func (c *CPU) tsx() uint8 { return 0 }
 
 // Transfer X to Accumulator
-func (c *CPU) txa() {}
+func (c *CPU) txa() uint8 { return 0 }
 
 // Transfer X to Stack Pointer
-func (c *CPU) txs() {}
+func (c *CPU) txs() uint8 { return 0 }
 
 // Transfer Y to Accumulator
-func (c *CPU) tya() {}
+func (c *CPU) tya() uint8 { return 0 }
 
 func (c *CPU) opcodeFuncFromMnemonic(mnemonic string) (opcodeFunc, error) {
 	mnemonic = strings.ToUpper(mnemonic)
