@@ -27,7 +27,18 @@ func (c *CPU) and() uint8 {
 func (c *CPU) asl() uint8 { return 0 }
 
 // Branch if Carry Clear
-func (c *CPU) bcc() uint8 { return 0 }
+func (c *CPU) bcc() uint8 {
+	if !c.getFlag(flagCBit) {
+		c.cycles++
+		c.addrAbs = c.pc + c.addrRel
+		// different pages
+		if c.addrAbs&0xFF00 != c.pc&0xFF00 {
+			c.cycles++
+		}
+		c.pc = c.addrAbs
+	}
+	return 0
+}
 
 // Branch if Carry Set
 func (c *CPU) bcs() uint8 {
