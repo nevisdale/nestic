@@ -4,7 +4,15 @@ type ReadWriter interface {
 	Read8(addr uint16) uint8
 	Read16(addr uint16) uint16
 	Write8(addr uint16, data uint8)
+	Write16(addr uint16, data uint16)
 }
+
+const (
+	// stack base address
+	// The stack is located in the fixed memory page $0100 to $01FF.
+	// The Stack Pointer holds the lower 8 bits of the address within this page
+	stackBase = 0x0100
+)
 
 const (
 	flagCBit = uint8(1 << 0) // Carry flag
@@ -29,12 +37,19 @@ type CPU struct {
 	regX uint8 // used primarily for indexing and temporary storage
 	regY uint8 // used mainly for indexing and temporary storage
 
+	// stack pointer
 	// The stack is located in the fixed memory page $0100 to $01FF.
 	// The Stack Pointer holds the lower 8 bits of the address within this page
 	//
 	// Initialization:
 	// The Stack Pointer is initialized by the system or the program at the start of execution.
 	// Typically, it starts at $FF, pointing to the top of the stack.
+	// sp uses with stackBase to get the actual address.
+	//
+	// 0xfd or 0xff?
+	// https://forums.nesdev.org/viewtopic.php?t=715&start=15
+	// actually, doesn't matter. both are correct.
+	// in this implementation, we use 0xff.
 	sp uint8
 
 	pc     uint16 // program counter
@@ -48,12 +63,12 @@ type CPU struct {
 	// Position in the slice is opcode.
 	instructions []instruction
 
-	fetched    uint8
-	addrAbs    uint16
-	addrRel    uint16
-	opcode     uint8
-	cycles     uint8
-	ticCounter uint64
+	fetched uint8
+	addrAbs uint16
+	addrRel uint16
+	opcode  uint8
+	cycles  uint8
+	// ticCounter uint64
 }
 
 func NewCPU() (*CPU, error) {
@@ -109,13 +124,54 @@ func (c *CPU) Tic() {
 //
 // reset the CPU to its initial state
 func (c *CPU) Reset() {
+	c.regA = 0
+	c.regX = 0
+	c.regY = 0
+	c.status = 0x00 | flagUBit
+	c.sp = 0xff
+	c.pc = c.bus.Read16(0xfffc)
+	c.cycles = 8
 }
 
 // interrupt request signal
-func (c *CPU) IRQ() {}
+func (c *CPU) IRQ() {
+	if c.getFlag(flagIBit) {
+		return
+	}
+
+	c.bus.Write16(stackBase+uint16(c.sp), c.pc)
+	c.sp--
+
+	c.setFlag(flagBBit, false)
+	c.setFlag(flagUBit, true)
+	c.setFlag(flagIBit, true)
+
+	c.bus.Write8(stackBase+uint16(c.sp), c.status)
+	c.sp--
+
+	c.addrAbs = 0xfffe
+	c.pc = c.bus.Read16(c.addrAbs)
+
+	c.cycles = 7
+}
 
 // non-maskable interrupt request signal
-func (c *CPU) NMI() {}
+func (c *CPU) NMI() {
+	c.bus.Write16(stackBase+uint16(c.sp), c.pc)
+	c.sp--
+
+	c.setFlag(flagBBit, false)
+	c.setFlag(flagUBit, true)
+	c.setFlag(flagIBit, true)
+
+	c.bus.Write8(stackBase+uint16(c.sp), c.status)
+	c.sp--
+
+	c.addrAbs = 0xfffa
+	c.pc = c.bus.Read16(c.addrAbs)
+
+	c.cycles = 8
+}
 
 // fetch is used to read data from memory.
 // do not use it when operation uses address for jump or branch.

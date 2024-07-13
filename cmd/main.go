@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -17,4 +18,9 @@ func main() {
 
 	bus := bus.NewBus()
 	bus.ConnectCPU(cpu)
+
+	a := uint(12)
+	fmt.Printf("a: %b\n", a)
+	a = ^a
+	fmt.Printf("a: %b\n", a)
 }

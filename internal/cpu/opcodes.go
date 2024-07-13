@@ -8,7 +8,25 @@ import (
 type opcodeFunc func() uint8
 
 // Add with Carry
-func (c *CPU) adc() uint8 { return 0 }
+func (c *CPU) adc() uint8 {
+	m8 := c.fetch()
+	r16 := uint16(c.regA) + uint16(m8)
+	if c.getFlag(flagCBit) {
+		r16++
+	}
+	r8 := uint8(r16 & 0x00ff)
+
+	c.setFlag(flagCBit, r16 > 0xff)
+	c.setFlag(flagZBit, r8 == 0)
+	c.setFlag(flagNBit, r8&0x80 > 0)
+	c.setFlag(flagVBit, (c.regA^r8) & ^(c.regA^m8) & 0x80 != 0)
+
+	c.regA = r8
+
+	// because we are using the fetch method, we need to add 1 cycl
+	// if there is a page boundary
+	return 1
+}
 
 // Logical AND
 func (c *CPU) and() uint8 {
@@ -160,10 +178,16 @@ func (c *CPU) cld() uint8 {
 }
 
 // Clear Interrupt Disable
-func (c *CPU) cli() uint8 { return 0 }
+func (c *CPU) cli() uint8 {
+	c.setFlag(flagIBit, false)
+	return 0
+}
 
 // Clear Overflow Flag
-func (c *CPU) clv() uint8 { return 0 }
+func (c *CPU) clv() uint8 {
+	c.setFlag(flagVBit, false)
+	return 0
+}
 
 // Compare
 func (c *CPU) cmp() uint8 { return 0 }
@@ -220,16 +244,35 @@ func (c *CPU) nop() uint8 { return 0 }
 func (c *CPU) ora() uint8 { return 0 }
 
 // Push Accumulator
-func (c *CPU) pha() uint8 { return 0 }
+func (c *CPU) pha() uint8 {
+	c.bus.Write8(stackBase+uint16(c.sp), c.regA)
+	c.sp--
+	return 0
+}
 
 // Push Processor Status
-func (c *CPU) php() uint8 { return 0 }
+func (c *CPU) php() uint8 {
+	c.bus.Write8(stackBase+uint16(c.sp), c.status)
+	c.sp--
+	return 0
+}
 
 // Pull Accumulator
-func (c *CPU) pla() uint8 { return 0 }
+func (c *CPU) pla() uint8 {
+	c.sp++
+	c.regA = c.bus.Read8(stackBase + uint16(c.sp))
+	c.setFlag(flagZBit, c.regA == 0)
+	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	return 0
+}
 
 // Pull Processor Status
-func (c *CPU) plp() uint8 { return 0 }
+func (c *CPU) plp() uint8 {
+	c.sp++
+	c.status = c.bus.Read8(stackBase + uint16(c.sp))
+	return 0
+
+}
 
 // Rotate Left
 func (c *CPU) rol() uint8 { return 0 }
@@ -238,22 +281,63 @@ func (c *CPU) rol() uint8 { return 0 }
 func (c *CPU) ror() uint8 { return 0 }
 
 // Return from Interrupt
-func (c *CPU) rti() uint8 { return 0 }
+func (c *CPU) rti() uint8 {
+	c.sp++
+	c.status = c.bus.Read8(stackBase + uint16(c.sp))
+	c.status &= ^flagBBit
+	c.status &= ^flagUBit
+
+	c.sp++
+	c.pc = c.bus.Read16(stackBase + uint16(c.sp))
+
+	return 0
+}
 
 // Return from Subroutine
 func (c *CPU) rts() uint8 { return 0 }
 
 // Subtract with Carry
-func (c *CPU) sbc() uint8 { return 0 }
+func (c *CPU) sbc() uint8 {
+	// TODO: need to test this
+
+	m8 := c.fetch()
+	m8 = ^m8
+
+	r16 := uint16(c.regA) + uint16(m8)
+	if c.getFlag(flagCBit) {
+		r16++
+	}
+	r8 := uint8(r16 & 0x00ff)
+
+	c.setFlag(flagCBit, r16 <= 0xff)
+	c.setFlag(flagZBit, r8 == 0)
+	c.setFlag(flagNBit, r8&0x80 != 0)
+	c.setFlag(flagVBit, (c.regA^r8)&(r8^m8)&0x80 != 0)
+
+	c.regA = r8
+
+	// because we are using the fetch method, we need to add 1 cycl
+	// if there is a page boundary
+	return 1
+}
 
 // Set Carry Flag
-func (c *CPU) sec() uint8 { return 0 }
+func (c *CPU) sec() uint8 {
+	c.setFlag(flagCBit, true)
+	return 0
+}
 
 // Set Decimal Flag
-func (c *CPU) sed() uint8 { return 0 }
+func (c *CPU) sed() uint8 {
+	c.setFlag(flagDBit, true)
+	return 0
+}
 
 // Set Interrupt Disable
-func (c *CPU) sei() uint8 { return 0 }
+func (c *CPU) sei() uint8 {
+	c.setFlag(flagIBit, true)
+	return 0
+}
 
 // Store Accumulator
 func (c *CPU) sta() uint8 { return 0 }

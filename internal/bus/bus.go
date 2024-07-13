@@ -69,3 +69,8 @@ func (b Bus) Read16(addr uint16) uint16 {
 func (b Bus) Write8(addr uint16, data uint8) {
 	b.ram[addr] = data
 }
+
+func (b Bus) Write16(addr uint16, data uint16) {
+	b.ram[addr] = uint8(data)
+	b.ram[addr+1] = uint8(data >> 8)
+}
