@@ -42,7 +42,21 @@ func (c *CPU) and() uint8 {
 }
 
 // Arithmetic Shift Left
-func (c *CPU) asl() uint8 { return 0 }
+func (c *CPU) asl() uint8 {
+	r8 := c.fetch()
+	r16 := uint16(r8) << 1
+
+	c.setFlag(flagCBit, r16 > 0xff)
+	c.setFlag(flagZBit, r16&0x00ff == 0)
+	c.setFlag(flagNBit, r16&0x80 > 0)
+
+	if c.instructions[c.opcode].addrMode == addrModeACC || c.instructions[c.opcode].addrMode == addrModeIMP {
+		c.regA = uint8(r16 & 0x00ff)
+	} else {
+		c.bus.Write8(c.addrAbs, uint8(r16&0x00ff))
+	}
+	return 0
+}
 
 // Branch if Carry Clear
 func (c *CPU) bcc() uint8 {
@@ -190,13 +204,41 @@ func (c *CPU) clv() uint8 {
 }
 
 // Compare
-func (c *CPU) cmp() uint8 { return 0 }
+func (c *CPU) cmp() uint8 {
+	m := c.fetch()
+	r := c.regA - m
+
+	c.setFlag(flagCBit, c.regA >= m)
+	c.setFlag(flagZBit, r == 0)
+	c.setFlag(flagNBit, r&0x80 > 0)
+
+	// if the operation crosses a page boundary, we need to add 1 cycle
+	return 1
+}
 
 // Compare X Register
-func (c *CPU) cpx() uint8 { return 0 }
+func (c *CPU) cpx() uint8 {
+	m := c.fetch()
+	r := c.regX - m
+
+	c.setFlag(flagCBit, c.regX >= m)
+	c.setFlag(flagZBit, r == 0)
+	c.setFlag(flagNBit, r&0x80 > 0)
+
+	return 0
+}
 
 // Compare Y Register
-func (c *CPU) cpy() uint8 { return 0 }
+func (c *CPU) cpy() uint8 {
+	m := c.fetch()
+	r := c.regY - m
+
+	c.setFlag(flagCBit, c.regY >= m)
+	c.setFlag(flagZBit, r == 0)
+	c.setFlag(flagNBit, r&0x80 > 0)
+
+	return 0
+}
 
 // Decrement Memory
 func (c *CPU) dec() uint8 { return 0 }
