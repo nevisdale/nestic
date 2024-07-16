@@ -367,10 +367,27 @@ func (c *CPU) ldy() uint8 {
 }
 
 // Logical Shift Right
-func (c *CPU) lsr() uint8 { return 0 }
+func (c *CPU) lsr() uint8 {
+	m := c.fetch()
+	c.setFlag(flagCBit, m&0x1 == 1)
+	m >>= 1
+
+	c.setFlag(flagNBit, m == 0)
+	c.setFlag(flagZBit, m&0x80 == 1)
+
+	if am := c.instructions[c.opcode].addrMode; am == addrModeIMP || am == addrModeACC {
+		c.regA = m
+	} else {
+		c.bus.Write8(c.addrAbs, m)
+	}
+
+	return 0
+}
 
 // No Operation
-func (c *CPU) nop() uint8 { return 0 }
+func (c *CPU) nop() uint8 {
+	return 0
+}
 
 // Logical Inclusive OR
 func (c *CPU) ora() uint8 { return 0 }
