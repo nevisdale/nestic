@@ -318,19 +318,53 @@ func (c *CPU) iny() uint8 {
 }
 
 // Jump
-func (c *CPU) jmp() uint8 { return 0 }
+func (c *CPU) jmp() uint8 {
+	c.pc = c.addrAbs
+	return 0
+}
 
 // Jump to Subroutine
-func (c *CPU) jsr() uint8 { return 0 }
+func (c *CPU) jsr() uint8 {
+	c.pc -= 1
+	c.bus.Write16(stackBase+uint16(c.sp), c.pc)
+	c.sp -= 2
+	c.pc = c.addrAbs
+
+	return 0
+}
 
 // Load Accumulator
-func (c *CPU) lda() uint8 { return 0 }
+func (c *CPU) lda() uint8 {
+	m := c.fetch()
+	c.regA = m
+
+	c.setFlag(flagZBit, c.regA == 0)
+	c.setFlag(flagNBit, c.regA&0x80 > 0)
+
+	return 1
+}
 
 // Load X Register
-func (c *CPU) ldx() uint8 { return 0 }
+func (c *CPU) ldx() uint8 {
+	m := c.fetch()
+	c.regX = m
+
+	c.setFlag(flagZBit, c.regX == 0)
+	c.setFlag(flagNBit, c.regX&0x80 > 0)
+
+	return 1
+}
 
 // Load Y Register
-func (c *CPU) ldy() uint8 { return 0 }
+func (c *CPU) ldy() uint8 {
+	m := c.fetch()
+	c.regY = m
+
+	c.setFlag(flagZBit, c.regY == 0)
+	c.setFlag(flagNBit, c.regY&0x80 > 0)
+
+	return 1
+}
 
 // Logical Shift Right
 func (c *CPU) lsr() uint8 { return 0 }
