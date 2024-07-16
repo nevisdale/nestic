@@ -432,10 +432,48 @@ func (c *CPU) plp() uint8 {
 }
 
 // Rotate Left
-func (c *CPU) rol() uint8 { return 0 }
+func (c *CPU) rol() uint8 {
+	m := c.fetch()
+	resultC := m&0x80 > 0
+	m = m << 1
+	if c.getFlag(flagCBit) {
+		m |= 0x1
+	}
+
+	c.setFlag(flagCBit, resultC)
+	c.setFlag(flagZBit, m == 0)
+	c.setFlag(flagNBit, m&0x80 > 0)
+
+	if am := c.instructions[c.opcode].addrMode; am == addrModeIMP || am == addrModeACC {
+		c.regA = m
+	} else {
+		c.bus.Write8(c.addrAbs, m)
+	}
+
+	return 0
+}
 
 // Rotate Right
-func (c *CPU) ror() uint8 { return 0 }
+func (c *CPU) ror() uint8 {
+	m := c.fetch()
+	m >>= 1
+
+	if c.getFlag(flagCBit) {
+		m |= 0x80
+	}
+
+	c.setFlag(flagCBit, m&0x1 > 0)
+	c.setFlag(flagZBit, m == 0)
+	c.setFlag(flagNBit, m&0x80 > 0)
+
+	if am := c.instructions[c.opcode].addrMode; am == addrModeIMP || am == addrModeACC {
+		c.regA = m
+	} else {
+		c.bus.Write8(c.addrAbs, m)
+	}
+
+	return 0
+}
 
 // Return from Interrupt
 func (c *CPU) rti() uint8 {
