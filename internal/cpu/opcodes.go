@@ -241,25 +241,73 @@ func (c *CPU) cpy() uint8 {
 }
 
 // Decrement Memory
-func (c *CPU) dec() uint8 { return 0 }
+func (c *CPU) dec() uint8 {
+	m := c.fetch()
+	m -= 1
+
+	c.setFlag(flagZBit, m == 0)
+	c.setFlag(flagNBit, m&0x80 > 0)
+
+	c.bus.Write8(c.addrAbs, m)
+
+	return 0
+}
 
 // Decrement X Register
-func (c *CPU) dex() uint8 { return 0 }
+func (c *CPU) dex() uint8 {
+	c.regX -= 1
+
+	c.setFlag(flagZBit, c.regX == 0)
+	c.setFlag(flagNBit, c.regX&0x80 > 0)
+
+	return 0
+}
 
 // Decrement Y Register
-func (c *CPU) dey() uint8 { return 0 }
+func (c *CPU) dey() uint8 {
+	c.regY -= 1
+
+	c.setFlag(flagZBit, c.regY == 0)
+	c.setFlag(flagNBit, c.regY&0x80 > 0)
+
+	return 0
+}
 
 // Exclusive OR
 func (c *CPU) eor() uint8 { return 0 }
 
 // Increment Memory
-func (c *CPU) inc() uint8 { return 0 }
+func (c *CPU) inc() uint8 {
+	m := c.fetch()
+	m += 1
+
+	c.setFlag(flagZBit, m == 0)
+	c.setFlag(flagNBit, m&0x80 > 0)
+
+	c.bus.Write8(c.addrAbs, m)
+
+	return 0
+}
 
 // Increment X Register
-func (c *CPU) inx() uint8 { return 0 }
+func (c *CPU) inx() uint8 {
+	c.regX += 1
+
+	c.setFlag(flagZBit, c.regX == 0)
+	c.setFlag(flagNBit, c.regX&0x80 > 0)
+
+	return 0
+}
 
 // Increment Y Register
-func (c *CPU) iny() uint8 { return 0 }
+func (c *CPU) iny() uint8 {
+	c.regY += 1
+
+	c.setFlag(flagZBit, c.regY == 0)
+	c.setFlag(flagNBit, c.regY&0x80 > 0)
+
+	return 0
+}
 
 // Jump
 func (c *CPU) jmp() uint8 { return 0 }
