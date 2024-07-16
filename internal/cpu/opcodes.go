@@ -540,31 +540,79 @@ func (c *CPU) sei() uint8 {
 }
 
 // Store Accumulator
-func (c *CPU) sta() uint8 { return 0 }
+func (c *CPU) sta() uint8 {
+	c.bus.Write8(c.addrAbs, c.regA)
+	return 0
+}
 
 // Store X Register
-func (c *CPU) stx() uint8 { return 0 }
+func (c *CPU) stx() uint8 {
+	c.bus.Write8(c.addrAbs, c.regX)
+	return 0
+}
 
 // Store Y Register
-func (c *CPU) sty() uint8 { return 0 }
+func (c *CPU) sty() uint8 {
+	c.bus.Write8(c.addrAbs, c.regY)
+	return 0
+}
 
 // Transfer Accumulator to X
-func (c *CPU) tax() uint8 { return 0 }
+func (c *CPU) tax() uint8 {
+	c.regX = c.regA
+
+	c.setFlag(flagNBit, c.regX&0x80 > 0)
+	c.setFlag(flagZBit, c.regX == 0)
+
+	return 0
+}
 
 // Transfer Accumulator to Y
-func (c *CPU) tay() uint8 { return 0 }
+func (c *CPU) tay() uint8 {
+	c.regY = c.regA
+
+	c.setFlag(flagNBit, c.regY&0x80 > 0)
+	c.setFlag(flagZBit, c.regY == 0)
+
+	return 0
+}
 
 // Transfer Stack Pointer to X
-func (c *CPU) tsx() uint8 { return 0 }
+func (c *CPU) tsx() uint8 {
+	c.regX = c.sp
+
+	c.setFlag(flagNBit, c.regX&0x80 > 0)
+	c.setFlag(flagZBit, c.regX == 0)
+
+	return 0
+}
 
 // Transfer X to Accumulator
-func (c *CPU) txa() uint8 { return 0 }
+func (c *CPU) txa() uint8 {
+	c.regA = c.regX
+
+	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	c.setFlag(flagZBit, c.regA == 0)
+
+	return 0
+}
 
 // Transfer X to Stack Pointer
-func (c *CPU) txs() uint8 { return 0 }
+func (c *CPU) txs() uint8 {
+	c.sp = c.regX
+
+	return 0
+}
 
 // Transfer Y to Accumulator
-func (c *CPU) tya() uint8 { return 0 }
+func (c *CPU) tya() uint8 {
+	c.regA = c.regX
+
+	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	c.setFlag(flagZBit, c.regA == 0)
+
+	return 0
+}
 
 func (c *CPU) opcodeFuncFromMnemonic(mnemonic string) (opcodeFunc, error) {
 	mnemonic = strings.ToUpper(mnemonic)
