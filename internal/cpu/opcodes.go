@@ -390,7 +390,15 @@ func (c *CPU) nop() uint8 {
 }
 
 // Logical Inclusive OR
-func (c *CPU) ora() uint8 { return 0 }
+func (c *CPU) ora() uint8 {
+	m := c.fetch()
+	c.regA = c.regA | m
+
+	c.setFlag(flagNBit, c.regA == 0)
+	c.setFlag(flagZBit, c.regA&0x80 > 0)
+
+	return 1
+}
 
 // Push Accumulator
 func (c *CPU) pha() uint8 {
