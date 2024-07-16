@@ -157,7 +157,23 @@ func (c *CPU) bpl() uint8 {
 }
 
 // Force Interrupt
-func (c *CPU) brk() uint8 { return 0 }
+func (c *CPU) brk() uint8 {
+	c.pc++
+
+	c.bus.Write16(stackBase+uint16(c.sp), c.pc)
+	c.sp -= 2
+
+	c.setFlag(flagIBit, true)
+	c.setFlag(flagBBit, true)
+
+	c.bus.Write8(stackBase+uint16(c.sp), c.status)
+	c.sp--
+
+	c.setFlag(flagBBit, false)
+
+	c.pc = c.bus.Read16(0x00fe)
+	return 0
+}
 
 // Branch if Overflow Clear
 func (c *CPU) bvc() uint8 {
