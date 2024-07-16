@@ -274,7 +274,15 @@ func (c *CPU) dey() uint8 {
 }
 
 // Exclusive OR
-func (c *CPU) eor() uint8 { return 0 }
+func (c *CPU) eor() uint8 {
+	m := c.fetch()
+	c.regA = c.regA ^ m
+
+	c.setFlag(flagZBit, c.regA == 0)
+	c.setFlag(flagNBit, c.regA&0x80 > 0)
+
+	return 1
+}
 
 // Increment Memory
 func (c *CPU) inc() uint8 {
