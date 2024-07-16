@@ -104,7 +104,15 @@ func (c *CPU) beq() uint8 {
 }
 
 // Bit Test
-func (c *CPU) bit() uint8 { return 0 }
+func (c *CPU) bit() uint8 {
+	m := c.fetch() & c.regA
+
+	c.setFlag(flagZBit, m == 0)
+	c.setFlag(flagNBit, m&0x80 > 0) // 1 << 7
+	c.setFlag(flagVBit, m&0x40 > 0) // 1 << 6
+
+	return 0
+}
 
 // Branch if Minus
 func (c *CPU) bmi() uint8 {
