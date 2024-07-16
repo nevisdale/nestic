@@ -489,7 +489,12 @@ func (c *CPU) rti() uint8 {
 }
 
 // Return from Subroutine
-func (c *CPU) rts() uint8 { return 0 }
+func (c *CPU) rts() uint8 {
+	c.sp += 2
+	c.pc = c.bus.Read16(c.addrAbs)
+	c.pc++
+	return 0
+}
 
 // Subtract with Carry
 func (c *CPU) sbc() uint8 {
