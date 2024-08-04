@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/nevisdale/nestic/internal/nes"
 )
@@ -22,7 +23,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	bus := nes.NewBus()
-	bus.LoadCart(cart)
-	bus.Reset()
+	nes := nes.NewBus()
+	nes.LoadCart(cart)
+	nes.Reset()
+
+	for {
+		nes.Tic()
+		time.Sleep(time.Second / 60)
+	}
+
 }

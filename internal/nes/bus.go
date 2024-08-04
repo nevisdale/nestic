@@ -28,7 +28,10 @@ func (b *Bus) Reset() {
 }
 
 func (b *Bus) Tic() {
-	b.cpu.Tic()
+	// FIXME: use cpu and ppu cycles to sync
 	b.ppu.Tic()
+	if b.ticCounter%3 == 0 {
+		b.cpu.Tic()
+	}
 	b.ticCounter++
 }

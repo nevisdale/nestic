@@ -12,9 +12,14 @@ type PPU struct {
 	ppudata   uint8
 	oamdma    uint8
 
-	tableNames    [2][0x400]uint8
-	tablePalletes [0x20]uint8
+	tableNames   [2][0x400]uint8
+	tablePallete [0x20]uint8
+	// TODO: it stored in the cart. should we use it here?
 	tablePatterns [2][0x1000]uint8
+
+	cycles   uint16
+	scanLine uint16
+	frame    uint16
 }
 
 func NewPPU() *PPU {
@@ -66,5 +71,14 @@ func (p *PPU) writeRegister(addr uint16, data uint8) {
 }
 
 func (p *PPU) Tic() {
+	p.cycles++
+	if p.cycles > 340 {
+		p.cycles = 0
+		p.scanLine++
 
+		if p.scanLine > 260 {
+			p.scanLine = 0 // or -1?
+			p.frame++
+		}
+	}
 }

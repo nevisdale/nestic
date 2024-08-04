@@ -87,12 +87,36 @@ func (b Bus) newPpuMemory() *ppuMemory {
 
 func (p ppuMemory) Read8(addr uint16) uint8 {
 	addr &= 0x3FFF
-	_ = addr
+	switch {
+	case addr < 0x2000:
+		return p.bus.cart.Read8(addr)
+	case addr < 0x3F00:
+	case addr < 0x4000:
+		addr &= 0x1F
+		// Palette mirroring
+		if addr >= 0x10 {
+			addr -= 0x10
+		}
+		return p.bus.ppu.tablePallete[addr]
+	}
 	return 0
 }
 
 func (p *ppuMemory) Write8(addr uint16, data uint8) {
 	addr &= 0x3FFF
-	_ = addr
-	_ = data
+	switch {
+	case addr < 0x2000:
+		p.bus.cart.Write8(addr, data)
+		return
+	case addr < 0x3F00:
+		return
+	case addr < 0x4000:
+		addr &= 0x1F
+		// Palette mirroring
+		if addr >= 0x10 {
+			addr -= 0x10
+		}
+		p.bus.ppu.tablePallete[addr] = data
+		return
+	}
 }

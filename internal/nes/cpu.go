@@ -1,6 +1,8 @@
 package nes
 
-import "log"
+import (
+	"log"
+)
 
 const (
 	// The stack is located in the fixed memory page $0100 to $01FF.
@@ -19,6 +21,43 @@ const (
 )
 
 type addrMode uint8
+
+func (a addrMode) String() string {
+	switch a {
+	case addrModeIMM:
+		return "IMM"
+	case addrModeZP:
+		return "ZP"
+	case addrModeZPX:
+		return "ZPX"
+	case addrModeZPY:
+		return "ZPY"
+	case addrModeABS:
+		return "ABS"
+	case addrModeABSX:
+		return "ABSX"
+	case addrModeABSY:
+		return "ABSY"
+	case addrModeIND:
+		return "IND"
+	case addrModeINDX:
+		return "INDX"
+	case addrModeINDY:
+		return "INDY"
+	case addrModeREL:
+		return "REL"
+
+	case addrModeACC:
+		return "ACC"
+	case addrModeIMP:
+		return "IMP"
+
+	default:
+		return "UNKNOWN"
+
+	}
+
+}
 
 const (
 	// Immediate
@@ -178,6 +217,7 @@ func (c *CPU) Tic() {
 		c.cycles--
 		return
 	}
+	oldPc := c.pc
 
 	opcode := c.read8(c.pc)
 	c.pc++
@@ -185,6 +225,12 @@ func (c *CPU) Tic() {
 	c.fetch(instr.mode)
 	instr.fn()
 	c.cycles += instr.cycles
+
+	oldAddrMode := c.addrMode
+
+	log.Printf("pc: %04X, opcode: %02X, instr: %s, mode: %3s, fetchedAddr: %04X, fetchedValue: %02X\n",
+		oldPc, opcode, instr.name, oldAddrMode.String(), c.operandAddr, c.operandValue,
+	)
 
 	c.addrMode = 0
 	c.operandAddr = 0

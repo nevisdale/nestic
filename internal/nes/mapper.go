@@ -2,6 +2,7 @@ package nes
 
 import "log"
 
+// TODO: think about separating into TranslateCpuAddr and TranslatePpuAddr
 type Mapper interface {
 	ReadWriter
 }
@@ -10,9 +11,7 @@ func NewMapper(cart *Cart) Mapper {
 	switch cart.mapperID {
 	case 0:
 		return &Mapper0{cart}
-
 	}
-
 	return nil
 }
 
