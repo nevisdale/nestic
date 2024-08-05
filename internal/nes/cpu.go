@@ -133,12 +133,12 @@ type instruction struct {
 }
 
 type CPU struct {
-	regA         uint8              // used to perform arithmetic and logical operations
-	regX         uint8              // used primarily for indexing and temporary storage
-	regY         uint8              // used mainly for indexing and temporary storage
+	a            uint8              // used to perform arithmetic and logical operations
+	x            uint8              // used primarily for indexing and temporary storage
+	y            uint8              // used mainly for indexing and temporary storage
+	p            uint8              // contains flags from flagXBit
 	sp           uint8              // stack pointer
 	pc           uint16             // program counter
-	status       uint8              // contains flags from flagXBit
 	mem          ReadWriter         // bus to read and write data
 	instrs       [0x100]instruction // opcode -> instruction mapping
 	cycles       uint8              // number of cycles left for the current operation
@@ -174,15 +174,20 @@ func (c *CPU) write16(addr uint16, data uint16) {
 }
 
 func (c CPU) getFlag(flag uint8) bool {
-	return c.status&flag > 0
+	return c.p&flag > 0
 }
 
 func (c *CPU) setFlag(flag uint8, v bool) {
 	if v {
-		c.status |= flag
+		c.p |= flag
 		return
 	}
-	c.status &= ^flag
+	c.p &= ^flag
+}
+
+func (c *CPU) setFlagsZN(value uint8) {
+	c.setFlag(flagZBit, value == 0)
+	c.setFlag(flagNBit, value&0x80 > 0)
 }
 
 func (c *CPU) stackPop8() uint8 {
@@ -213,7 +218,6 @@ func (c *CPU) Tic() {
 		c.cycles--
 		return
 	}
-	oldPc := c.pc
 
 	opcode := c.read8(c.pc)
 	c.pc++
@@ -221,12 +225,6 @@ func (c *CPU) Tic() {
 	c.fetch(instr.mode)
 	instr.fn()
 	c.cycles += instr.cycles
-
-	oldAddrMode := c.addrMode
-
-	log.Printf("pc: %04X, opcode: %02X, instr: %s, mode: %3s, fetchedAddr: %04X, fetchedValue: %02X\n",
-		oldPc, opcode, instr.name, oldAddrMode.String(), c.operandAddr, c.operandValue,
-	)
 
 	c.addrMode = 0
 	c.operandAddr = 0
@@ -236,10 +234,10 @@ func (c *CPU) Tic() {
 
 // Reset the CPU to its initial state
 func (c *CPU) Reset() {
-	c.regA = 0
-	c.regX = 0
-	c.regY = 0
-	c.status = 0x00 | flagUBit
+	c.a = 0
+	c.x = 0
+	c.y = 0
+	c.p = 0x00 | flagUBit
 	c.sp = 0xfd
 	c.pc = c.read16(0xfffc)
 	c.cycles = 8
@@ -255,7 +253,7 @@ func (c *CPU) IRQ() {
 	c.setFlag(flagBBit, false)
 	c.setFlag(flagUBit, true)
 	c.setFlag(flagIBit, true)
-	c.stackPush8(c.status)
+	c.stackPush8(c.p)
 	c.pc = c.read16(0xfffe)
 	c.cycles = 7
 }
@@ -266,7 +264,7 @@ func (c *CPU) NMI() {
 	c.setFlag(flagBBit, false)
 	c.setFlag(flagUBit, true)
 	c.setFlag(flagIBit, true)
-	c.stackPush8(c.status)
+	c.stackPush8(c.p)
 	c.pc = c.read16(0xfffa)
 	c.cycles = 8
 }
@@ -291,13 +289,13 @@ func (c *CPU) fetch(addrMode addrMode) {
 		return
 
 	case addrModeZPX:
-		c.operandAddr = uint16(c.read8(c.pc) + c.regX)
+		c.operandAddr = uint16(c.read8(c.pc) + c.x)
 		c.pc++
 		c.operandValue = c.read8(c.operandAddr)
 		return
 
 	case addrModeZPY:
-		c.operandAddr = uint16(c.read8(c.pc) + c.regY)
+		c.operandAddr = uint16(c.read8(c.pc) + c.y)
 		c.pc++
 		c.operandValue = c.read8(c.operandAddr)
 		return
@@ -311,7 +309,7 @@ func (c *CPU) fetch(addrMode addrMode) {
 	case addrModeABSX:
 		baseAddr := c.read16(c.pc)
 		c.pc += 2
-		c.operandAddr = baseAddr + uint16(c.regX)
+		c.operandAddr = baseAddr + uint16(c.x)
 		c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = (baseAddr & 0xff00) != (c.operandAddr & 0xff00)
 		return
@@ -319,7 +317,7 @@ func (c *CPU) fetch(addrMode addrMode) {
 	case addrModeABSY:
 		baseAddr := c.read16(c.pc)
 		c.pc += 2
-		c.operandAddr = baseAddr + uint16(c.regY)
+		c.operandAddr = baseAddr + uint16(c.y)
 		c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = (baseAddr & 0xff00) != (c.operandAddr & 0xff00)
 		return
@@ -336,7 +334,7 @@ func (c *CPU) fetch(addrMode addrMode) {
 		return
 
 	case addrModeINDX:
-		addr := uint16(c.read8(c.pc) + c.regX)
+		addr := uint16(c.read8(c.pc) + c.x)
 		c.pc++
 		lo := uint16(c.read8(addr & 0x00ff))
 		hi := uint16(c.read8((addr + 1) & 0x00ff))
@@ -349,7 +347,7 @@ func (c *CPU) fetch(addrMode addrMode) {
 		c.pc++
 		lo := uint16(c.read8(addr))
 		hi := uint16(c.read8((addr + 1) & 0x00ff))
-		c.operandAddr = (lo | hi<<8) + uint16(c.regY)
+		c.operandAddr = (lo | hi<<8) + uint16(c.y)
 		c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = (lo & 0xff00) != (hi & 0xff00)
 		return
@@ -363,7 +361,7 @@ func (c *CPU) fetch(addrMode addrMode) {
 		return
 
 	case addrModeACC:
-		c.operandValue = c.regA
+		c.operandValue = c.a
 		return
 
 	case addrModeIMP:
@@ -374,6 +372,11 @@ func (c *CPU) fetch(addrMode addrMode) {
 	log.Fatalln("unreachable. addr mode must be always valid")
 }
 
+// returns true if the two values have the same sign, false otherwise
+func isSameSign(a, b uint8) bool {
+	return (a^b)&0x80 == 0
+}
+
 // Add with Carry
 // A = A + M + C
 //
@@ -381,19 +384,18 @@ func (c *CPU) fetch(addrMode addrMode) {
 //
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) adc() {
-	r16 := uint16(c.regA) + uint16(c.operandValue)
+	r16 := uint16(c.a) + uint16(c.operandValue)
 	if c.getFlag(flagCBit) {
 		r16++
 	}
 	r8 := uint8(r16)
 	c.setFlag(flagCBit, r16 > 0xff)
-	c.setFlag(flagZBit, r8 == 0)
-	c.setFlag(flagNBit, r8&0x80 > 0)
-	c.setFlag(flagVBit, (c.regA^r8)&^(c.regA^c.operandValue)&0x80 != 0)
+	c.setFlagsZN(r8)
+	c.setFlag(flagVBit, isSameSign(c.a, c.operandValue) && !isSameSign(c.a, r8))
 	if c.pageCrossed {
 		c.cycles++
 	}
-	c.regA = r8
+	c.a = r8
 }
 
 // Logical AND
@@ -403,9 +405,9 @@ func (c *CPU) adc() {
 //
 // An additional cycle is needed if the page boundary is crossed
 func (c *CPU) and() {
-	c.regA &= c.operandValue
-	c.setFlag(flagZBit, c.regA == 0)
-	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	c.a &= c.operandValue
+	c.setFlag(flagZBit, c.a == 0)
+	c.setFlag(flagNBit, c.a&0x80 > 0)
 	if c.pageCrossed {
 		c.cycles++
 	}
@@ -422,7 +424,7 @@ func (c *CPU) asl() {
 	c.setFlag(flagZBit, r8 == 0)
 	c.setFlag(flagNBit, r8&0x80 > 0)
 	if c.addrMode == addrModeACC {
-		c.regA = r8
+		c.a = r8
 	} else {
 		c.write8(c.operandAddr, r8)
 	}
@@ -496,7 +498,7 @@ func (c *CPU) beq() {
 //
 // Flags affected: Z, N, V
 func (c *CPU) bit() {
-	m := c.regA & c.operandValue
+	m := c.a & c.operandValue
 	c.setFlag(flagZBit, m == 0)
 	c.setFlag(flagNBit, m&0x80 > 0) // 1 << 7
 	c.setFlag(flagVBit, m&0x40 > 0) // 1 << 6
@@ -573,7 +575,7 @@ func (c *CPU) brk() {
 	c.stackPush16(c.pc)
 	c.setFlag(flagIBit, true)
 	c.setFlag(flagBBit, true)
-	c.stackPush8(c.status)
+	c.stackPush8(c.p)
 	c.setFlag(flagBBit, false)
 	c.pc = c.read16(0xfffe)
 }
@@ -659,8 +661,8 @@ func (c *CPU) clv() {
 //
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) cmp() {
-	r := c.regA - c.operandValue
-	c.setFlag(flagCBit, c.regA >= c.operandValue)
+	r := c.a - c.operandValue
+	c.setFlag(flagCBit, c.a >= c.operandValue)
 	c.setFlag(flagZBit, r == 0)
 	c.setFlag(flagNBit, r&0x80 > 0)
 	if c.pageCrossed {
@@ -673,8 +675,8 @@ func (c *CPU) cmp() {
 //
 // Flags affected: C, Z, N
 func (c *CPU) cpx() {
-	r := c.regX - c.operandValue
-	c.setFlag(flagCBit, c.regX >= c.operandValue)
+	r := c.x - c.operandValue
+	c.setFlag(flagCBit, c.x >= c.operandValue)
 	c.setFlag(flagZBit, r == 0)
 	c.setFlag(flagNBit, r&0x80 > 0)
 }
@@ -684,8 +686,8 @@ func (c *CPU) cpx() {
 //
 // Flags affected: C, Z, N
 func (c *CPU) cpy() {
-	r := c.regY - c.operandValue
-	c.setFlag(flagCBit, c.regY >= c.operandValue)
+	r := c.y - c.operandValue
+	c.setFlag(flagCBit, c.y >= c.operandValue)
 	c.setFlag(flagZBit, r == 0)
 	c.setFlag(flagNBit, r&0x80 > 0)
 }
@@ -706,9 +708,9 @@ func (c *CPU) dec() {
 //
 // Flags affected: Z, N
 func (c *CPU) dex() {
-	c.regX--
-	c.setFlag(flagZBit, c.regX == 0)
-	c.setFlag(flagNBit, c.regX&0x80 > 0)
+	c.x--
+	c.setFlag(flagZBit, c.x == 0)
+	c.setFlag(flagNBit, c.x&0x80 > 0)
 }
 
 // Decrement Y Register
@@ -716,9 +718,9 @@ func (c *CPU) dex() {
 //
 // Flags affected: Z, N
 func (c *CPU) dey() {
-	c.regY--
-	c.setFlag(flagZBit, c.regY == 0)
-	c.setFlag(flagNBit, c.regY&0x80 > 0)
+	c.y--
+	c.setFlag(flagZBit, c.y == 0)
+	c.setFlag(flagNBit, c.y&0x80 > 0)
 }
 
 // Exclusive OR
@@ -728,9 +730,9 @@ func (c *CPU) dey() {
 //
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) eor() {
-	c.regA ^= c.operandValue
-	c.setFlag(flagZBit, c.regA == 0)
-	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	c.a ^= c.operandValue
+	c.setFlag(flagZBit, c.a == 0)
+	c.setFlag(flagNBit, c.a&0x80 > 0)
 	if c.pageCrossed {
 		c.cycles++
 	}
@@ -752,9 +754,9 @@ func (c *CPU) inc() {
 //
 // Flags affected: Z, N
 func (c *CPU) inx() {
-	c.regX++
-	c.setFlag(flagZBit, c.regX == 0)
-	c.setFlag(flagNBit, c.regX&0x80 > 0)
+	c.x++
+	c.setFlag(flagZBit, c.x == 0)
+	c.setFlag(flagNBit, c.x&0x80 > 0)
 }
 
 // Increment Y Register
@@ -762,9 +764,9 @@ func (c *CPU) inx() {
 //
 // Flags affected: Z, N
 func (c *CPU) iny() {
-	c.regY++
-	c.setFlag(flagZBit, c.regY == 0)
-	c.setFlag(flagNBit, c.regY&0x80 > 0)
+	c.y++
+	c.setFlag(flagZBit, c.y == 0)
+	c.setFlag(flagNBit, c.y&0x80 > 0)
 }
 
 // Jump
@@ -792,9 +794,9 @@ func (c *CPU) jsr() {
 //
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) lda() {
-	c.regA = c.operandValue
-	c.setFlag(flagZBit, c.regA == 0)
-	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	c.a = c.operandValue
+	c.setFlag(flagZBit, c.a == 0)
+	c.setFlag(flagNBit, c.a&0x80 > 0)
 	if c.pageCrossed {
 		c.cycles++
 	}
@@ -807,9 +809,9 @@ func (c *CPU) lda() {
 //
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) ldx() {
-	c.regX = c.operandValue
-	c.setFlag(flagZBit, c.regX == 0)
-	c.setFlag(flagNBit, c.regX&0x80 > 0)
+	c.x = c.operandValue
+	c.setFlag(flagZBit, c.x == 0)
+	c.setFlag(flagNBit, c.x&0x80 > 0)
 	if c.pageCrossed {
 		c.cycles++
 	}
@@ -822,9 +824,9 @@ func (c *CPU) ldx() {
 //
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) ldy() {
-	c.regY = c.operandValue
-	c.setFlag(flagZBit, c.regY == 0)
-	c.setFlag(flagNBit, c.regY&0x80 > 0)
+	c.y = c.operandValue
+	c.setFlag(flagZBit, c.y == 0)
+	c.setFlag(flagNBit, c.y&0x80 > 0)
 	if c.pageCrossed {
 		c.cycles++
 	}
@@ -840,7 +842,7 @@ func (c *CPU) lsr() {
 	c.setFlag(flagZBit, r == 0)
 	c.setFlag(flagNBit, r&0x80 > 0)
 	if c.addrMode == addrModeACC {
-		c.regA = r
+		c.a = r
 	} else {
 		c.write8(c.operandAddr, r)
 	}
@@ -860,9 +862,9 @@ func (c *CPU) nop() {
 //
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) ora() {
-	c.regA |= c.operandValue
-	c.setFlag(flagZBit, c.regA == 0)
-	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	c.a |= c.operandValue
+	c.setFlag(flagZBit, c.a == 0)
+	c.setFlag(flagNBit, c.a&0x80 > 0)
 	if c.pageCrossed {
 		c.cycles++
 	}
@@ -873,13 +875,13 @@ func (c *CPU) ora() {
 //
 // Flags affected: None
 func (c *CPU) pha() {
-	c.stackPush8(c.regA)
+	c.stackPush8(c.a)
 }
 
-// Push Processor Status
-// status -> stack
+// Push Processor p
+// p -> stack
 func (c *CPU) php() {
-	c.stackPush8(c.status)
+	c.stackPush8(c.p)
 }
 
 // Pull Accumulator
@@ -887,17 +889,17 @@ func (c *CPU) php() {
 //
 // Flags affected: Z, N
 func (c *CPU) pla() {
-	c.regA = c.stackPop8()
-	c.setFlag(flagZBit, c.regA == 0)
-	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	c.a = c.stackPop8()
+	c.setFlag(flagZBit, c.a == 0)
+	c.setFlag(flagNBit, c.a&0x80 > 0)
 }
 
-// Pull Processor Status
-// status <- stack
+// Pull Processor p
+// p <- stack
 //
 // Flags affected: All
 func (c *CPU) plp() {
-	c.status = c.stackPop8()
+	c.p = c.stackPop8()
 }
 
 // Rotate Left
@@ -914,7 +916,7 @@ func (c *CPU) rol() {
 	c.setFlag(flagZBit, r == 0)
 	c.setFlag(flagNBit, r&0x80 > 0)
 	if c.addrMode == addrModeACC {
-		c.regA = r
+		c.a = r
 	} else {
 		c.write8(c.operandAddr, r)
 	}
@@ -934,20 +936,20 @@ func (c *CPU) ror() {
 	c.setFlag(flagZBit, r == 0)
 	c.setFlag(flagNBit, r&0x80 > 0)
 	if c.addrMode == addrModeACC {
-		c.regA = r
+		c.a = r
 	} else {
 		c.write8(c.operandAddr, r)
 	}
 }
 
 // Return from Interrupt
-// status <- stack, PC <- stack
+// p <- stack, PC <- stack
 //
 // Flags affected: All
 func (c *CPU) rti() {
-	c.status = c.stackPop8()
-	c.status &= ^flagBBit
-	c.status &= ^flagUBit
+	c.p = c.stackPop8()
+	c.p &= ^flagBBit
+	c.p &= ^flagUBit
 	c.pc = c.stackPop16()
 }
 
@@ -967,7 +969,7 @@ func (c *CPU) rts() {
 //
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) sbc() {
-	r16 := uint16(c.regA) + uint16(^c.operandValue)
+	r16 := uint16(c.a) + uint16(^c.operandValue)
 	if c.getFlag(flagCBit) {
 		r16++
 	}
@@ -975,8 +977,8 @@ func (c *CPU) sbc() {
 	c.setFlag(flagCBit, r16 > 0xff)
 	c.setFlag(flagZBit, r8 == 0)
 	c.setFlag(flagNBit, r8&0x80 > 0)
-	c.setFlag(flagVBit, (r8^c.regA)&(r8^c.operandValue)&0x80 > 0)
-	c.regA = r8
+	c.setFlag(flagVBit, (r8^c.a)&(r8^c.operandValue)&0x80 > 0)
+	c.a = r8
 	if c.pageCrossed {
 		c.cycles++
 	}
@@ -1011,7 +1013,7 @@ func (c *CPU) sei() {
 //
 // Flags affected: None
 func (c *CPU) sta() {
-	c.write8(c.operandAddr, c.regA)
+	c.write8(c.operandAddr, c.a)
 }
 
 // Store X Register
@@ -1019,7 +1021,7 @@ func (c *CPU) sta() {
 //
 // Flags affected: None
 func (c *CPU) stx() {
-	c.write8(c.operandAddr, c.regX)
+	c.write8(c.operandAddr, c.x)
 }
 
 // Store Y Register
@@ -1027,7 +1029,7 @@ func (c *CPU) stx() {
 //
 // Flags affected: None
 func (c *CPU) sty() {
-	c.write8(c.operandAddr, c.regY)
+	c.write8(c.operandAddr, c.y)
 }
 
 // Transfer Accumulator to X
@@ -1035,9 +1037,9 @@ func (c *CPU) sty() {
 //
 // Flags affected: Z, N
 func (c *CPU) tax() {
-	c.regX = c.regA
-	c.setFlag(flagZBit, c.regX == 0)
-	c.setFlag(flagNBit, c.regX&0x80 > 0)
+	c.x = c.a
+	c.setFlag(flagZBit, c.x == 0)
+	c.setFlag(flagNBit, c.x&0x80 > 0)
 }
 
 // Transfer Accumulator to Y
@@ -1045,9 +1047,9 @@ func (c *CPU) tax() {
 //
 // Flags affected: Z, N
 func (c *CPU) tay() {
-	c.regY = c.regA
-	c.setFlag(flagZBit, c.regY == 0)
-	c.setFlag(flagNBit, c.regY&0x80 > 0)
+	c.y = c.a
+	c.setFlag(flagZBit, c.y == 0)
+	c.setFlag(flagNBit, c.y&0x80 > 0)
 }
 
 // Transfer Stack Pointer to X
@@ -1055,9 +1057,9 @@ func (c *CPU) tay() {
 //
 // Flags affected: Z, N
 func (c *CPU) tsx() {
-	c.regX = c.sp
-	c.setFlag(flagZBit, c.regX == 0)
-	c.setFlag(flagNBit, c.regX&0x80 > 0)
+	c.x = c.sp
+	c.setFlag(flagZBit, c.x == 0)
+	c.setFlag(flagNBit, c.x&0x80 > 0)
 }
 
 // Transfer X to Accumulator
@@ -1065,9 +1067,9 @@ func (c *CPU) tsx() {
 //
 // Flags affected: Z, N
 func (c *CPU) txa() {
-	c.regA = c.regX
-	c.setFlag(flagZBit, c.regA == 0)
-	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	c.a = c.x
+	c.setFlag(flagZBit, c.a == 0)
+	c.setFlag(flagNBit, c.a&0x80 > 0)
 }
 
 // Transfer X to Stack Pointer
@@ -1075,7 +1077,7 @@ func (c *CPU) txa() {
 //
 // Flags affected: None
 func (c *CPU) txs() {
-	c.sp = c.regX
+	c.sp = c.x
 }
 
 // Transfer Y to Accumulator
@@ -1083,9 +1085,9 @@ func (c *CPU) txs() {
 //
 // Flags affected: Z, N
 func (c *CPU) tya() {
-	c.regA = c.regY
-	c.setFlag(flagZBit, c.regA == 0)
-	c.setFlag(flagNBit, c.regA&0x80 > 0)
+	c.a = c.y
+	c.setFlag(flagZBit, c.a == 0)
+	c.setFlag(flagNBit, c.a&0x80 > 0)
 }
 
 func (c *CPU) initInstructions() {
