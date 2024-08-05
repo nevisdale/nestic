@@ -449,3 +449,52 @@ func Test_JmpWithCondition(t *testing.T) {
 		testDo(t, arg, bvs)
 	})
 }
+
+func Test_Bit(t *testing.T) {
+	t.Parallel()
+
+	type testArgs struct {
+		initA        uint8
+		operandValue uint8
+		initP        uint8
+		expectedP    uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		cpu := NewCPU(nil)
+		cpu.a = in.initA
+		cpu.p = in.initP
+		cpu.operandValue = in.operandValue
+
+		cpu.bit()
+
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+	}
+
+	t.Run("set Z bit", func(t *testing.T) {
+		testDo(t, testArgs{
+			initA:        0x0,
+			operandValue: 0x12,
+			initP:        0,
+			expectedP:    flagZBit,
+		})
+	})
+
+	t.Run("set N bit", func(t *testing.T) {
+		testDo(t, testArgs{
+			initA:        0x80,
+			operandValue: 0x81,
+			initP:        0,
+			expectedP:    flagNBit,
+		})
+	})
+
+	t.Run("set V bit", func(t *testing.T) {
+		testDo(t, testArgs{
+			initA:        0x40,
+			operandValue: 0x48,
+			initP:        0,
+			expectedP:    flagVBit,
+		})
+	})
+}

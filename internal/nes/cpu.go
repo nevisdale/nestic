@@ -485,9 +485,8 @@ func (c *CPU) beq() {
 // Flags affected: Z, N, V
 func (c *CPU) bit() {
 	m := c.a & c.operandValue
-	c.setFlag(flagZBit, m == 0)
-	c.setFlag(flagNBit, m&0x80 > 0) // 1 << 7
-	c.setFlag(flagVBit, m&0x40 > 0) // 1 << 6
+	c.setFlagsZN(m)
+	c.setFlag(flagVBit, m&flagVBit > 0)
 }
 
 // Branch if Minus
