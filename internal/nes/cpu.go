@@ -427,6 +427,19 @@ func (c *CPU) asl() {
 	}
 }
 
+// common branch instruction
+func (c *CPU) jmpIf(condition bool) {
+	if !condition {
+		return
+	}
+	c.cycles++
+	addr := c.pc + c.operandAddr
+	if addr&0xff00 != c.pc&0xff00 {
+		c.cycles++ // different pages
+	}
+	c.pc = addr
+}
+
 // Branch if Carry Clear
 // If C = 0, PC <- PC + offset
 //
@@ -437,15 +450,7 @@ func (c *CPU) asl() {
 //	If the branch occurs on the same page (1 cycle)
 //	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bcc() {
-	if c.getFlag(flagCBit) {
-		return
-	}
-	c.cycles++
-	addr := c.pc + c.operandAddr
-	if addr&0xff00 != c.pc&0xff00 {
-		c.cycles++ // different pages
-	}
-	c.pc = addr
+	c.jmpIf(!c.getFlag(flagCBit))
 }
 
 // Branch if Carry Set
@@ -458,15 +463,7 @@ func (c *CPU) bcc() {
 //	If the branch occurs on the same page (1 cycle)
 //	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bcs() {
-	if !c.getFlag(flagCBit) {
-		return
-	}
-	c.cycles++
-	addr := c.pc + c.operandAddr
-	if addr&0xff00 != c.pc&0xff00 {
-		c.cycles++ // different pages
-	}
-	c.pc = addr
+	c.jmpIf(c.getFlag(flagCBit))
 }
 
 // Branch if Equal
@@ -479,15 +476,7 @@ func (c *CPU) bcs() {
 //	If the branch occurs on the same page (1 cycle)
 //	If the branch occurs on a different page (2 cycles)
 func (c *CPU) beq() {
-	if !c.getFlag(flagZBit) {
-		return
-	}
-	c.cycles++
-	addr := c.pc + c.operandAddr
-	if addr&0xff00 != c.pc&0xff00 {
-		c.cycles++ // different pages
-	}
-	c.pc = addr
+	c.jmpIf(c.getFlag(flagZBit))
 }
 
 // Bit Test
@@ -511,15 +500,7 @@ func (c *CPU) bit() {
 //	If the branch occurs on the same page (1 cycle)
 //	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bmi() {
-	if !c.getFlag(flagNBit) {
-		return
-	}
-	c.cycles++
-	addr := c.pc + c.operandAddr
-	if addr&0xff00 != c.pc&0xff00 {
-		c.cycles++ // different pages
-	}
-	c.pc = addr
+	c.jmpIf(c.getFlag(flagNBit))
 }
 
 // Branch if Not Equal
@@ -532,15 +513,7 @@ func (c *CPU) bmi() {
 //	If the branch occurs on the same page (1 cycle)
 //	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bne() {
-	if c.getFlag(flagZBit) {
-		return
-	}
-	c.cycles++
-	addr := c.pc + c.operandAddr
-	if addr&0xff00 != c.pc&0xff00 {
-		c.cycles++ // different pages
-	}
-	c.pc = addr
+	c.jmpIf(!c.getFlag(flagZBit))
 }
 
 // Branch if Positive
@@ -553,15 +526,7 @@ func (c *CPU) bne() {
 //	If the branch occurs on the same page (1 cycle)
 //	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bpl() {
-	if c.getFlag(flagNBit) {
-		return
-	}
-	c.cycles++
-	addr := c.pc + c.operandAddr
-	if addr&0xff00 != c.pc&0xff00 {
-		c.cycles++ // different pages
-	}
-	c.pc = addr
+	c.jmpIf(!c.getFlag(flagNBit))
 }
 
 // Force Interrupt
@@ -587,15 +552,7 @@ func (c *CPU) brk() {
 //	If the branch occurs on the same page (1 cycle)
 //	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bvc() {
-	if c.getFlag(flagVBit) {
-		return
-	}
-	c.cycles++
-	addr := c.pc + c.operandAddr
-	if addr&0xff00 != c.pc&0xff00 {
-		c.cycles++ // different pages
-	}
-	c.pc = addr
+	c.jmpIf(!c.getFlag(flagVBit))
 }
 
 // Branch if Overflow Set
@@ -608,15 +565,7 @@ func (c *CPU) bvc() {
 //	If the branch occurs on the same page (1 cycle)
 //	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bvs() {
-	if !c.getFlag(flagVBit) {
-		return
-	}
-	c.cycles++
-	addr := c.pc + c.operandAddr
-	if addr&0xff00 != c.pc&0xff00 {
-		c.cycles++ // different pages
-	}
-	c.pc = addr
+	c.jmpIf(c.getFlag(flagVBit))
 }
 
 // Clear Carry Flag

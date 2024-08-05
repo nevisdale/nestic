@@ -268,3 +268,176 @@ func Test_ASL(t *testing.T) {
 		mem.AssertExpectations(t)
 	})
 }
+
+func Test_JmpWithCondition(t *testing.T) {
+	type testArgs struct {
+		initP           uint8
+		initPC          uint16
+		expectedPC      uint16
+		initOperandAddr uint16
+		expectedCycles  uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs, do func(cpu *CPU)) {
+		cpu := NewCPU(nil)
+		cpu.p = in.initP
+		cpu.pc = in.initPC
+		cpu.operandAddr = in.initOperandAddr
+
+		do(cpu)
+
+		assert.Equal(t, in.expectedPC, cpu.pc, "PC register")
+		assert.Equal(t, in.expectedCycles, cpu.cycles, "Cycles")
+		assert.Equal(t, in.initP, cpu.p, "P register") // P register should not be changed
+	}
+
+	noJumpTestArgs := testArgs{
+		initP:           0,
+		initPC:          0x1000,
+		expectedPC:      0x1000,
+		initOperandAddr: 0x2000,
+		expectedCycles:  0,
+	}
+	jumpToSamePageTestArgs := testArgs{
+		initP:           0,
+		initPC:          0x1000,
+		expectedPC:      0x1010,
+		initOperandAddr: 0x0010,
+		expectedCycles:  1,
+	}
+	jumpToDifferentPageTestArgs := testArgs{
+		initP:           0,
+		initPC:          0x1000,
+		expectedPC:      0x2000,
+		initOperandAddr: 0x1000,
+		expectedCycles:  2,
+	}
+
+	t.Run("BCC", func(t *testing.T) {
+		bcc := func(cpu *CPU) { cpu.bcc() }
+
+		arg := noJumpTestArgs
+		arg.initP = flagCBit
+		testDo(t, arg, bcc)
+
+		arg = jumpToSamePageTestArgs
+		arg.initP = ^flagCBit
+		testDo(t, arg, bcc)
+
+		arg = jumpToDifferentPageTestArgs
+		arg.initP = ^flagCBit
+		testDo(t, arg, bcc)
+	})
+
+	t.Run("BCS", func(t *testing.T) {
+		bcs := func(cpu *CPU) { cpu.bcs() }
+
+		arg := noJumpTestArgs
+		arg.initP = ^flagCBit
+		testDo(t, arg, bcs)
+
+		arg = jumpToSamePageTestArgs
+		arg.initP = flagCBit
+		testDo(t, arg, bcs)
+
+		arg = jumpToDifferentPageTestArgs
+		arg.initP = flagCBit
+		testDo(t, arg, bcs)
+	})
+
+	t.Run("BEQ", func(t *testing.T) {
+		beq := func(cpu *CPU) { cpu.beq() }
+
+		arg := noJumpTestArgs
+		arg.initP = ^flagZBit
+		testDo(t, arg, beq)
+
+		arg = jumpToSamePageTestArgs
+		arg.initP = flagZBit
+		testDo(t, arg, beq)
+
+		arg = jumpToDifferentPageTestArgs
+		arg.initP = flagZBit
+		testDo(t, arg, beq)
+	})
+
+	t.Run("BMI", func(t *testing.T) {
+		bmi := func(cpu *CPU) { cpu.bmi() }
+
+		arg := noJumpTestArgs
+		arg.initP = ^flagNBit
+		testDo(t, arg, bmi)
+
+		arg = jumpToSamePageTestArgs
+		arg.initP = flagNBit
+		testDo(t, arg, bmi)
+
+		arg = jumpToDifferentPageTestArgs
+		arg.initP = flagNBit
+		testDo(t, arg, bmi)
+	})
+
+	t.Run("BNE", func(t *testing.T) {
+		bne := func(cpu *CPU) { cpu.bne() }
+
+		arg := noJumpTestArgs
+		arg.initP = flagZBit
+		testDo(t, arg, bne)
+
+		arg = jumpToSamePageTestArgs
+		arg.initP = ^flagZBit
+		testDo(t, arg, bne)
+
+		arg = jumpToDifferentPageTestArgs
+		arg.initP = ^flagZBit
+		testDo(t, arg, bne)
+	})
+
+	t.Run("BPL", func(t *testing.T) {
+		bpl := func(cpu *CPU) { cpu.bpl() }
+
+		arg := noJumpTestArgs
+		arg.initP = flagNBit
+		testDo(t, arg, bpl)
+
+		arg = jumpToSamePageTestArgs
+		arg.initP = ^flagNBit
+		testDo(t, arg, bpl)
+
+		arg = jumpToDifferentPageTestArgs
+		arg.initP = ^flagNBit
+		testDo(t, arg, bpl)
+	})
+
+	t.Run("BVC", func(t *testing.T) {
+		bvc := func(cpu *CPU) { cpu.bvc() }
+
+		arg := noJumpTestArgs
+		arg.initP = flagVBit
+		testDo(t, arg, bvc)
+
+		arg = jumpToSamePageTestArgs
+		arg.initP = ^flagVBit
+		testDo(t, arg, bvc)
+
+		arg = jumpToDifferentPageTestArgs
+		arg.initP = ^flagVBit
+		testDo(t, arg, bvc)
+	})
+
+	t.Run("BVS", func(t *testing.T) {
+		bvs := func(cpu *CPU) { cpu.bvs() }
+
+		arg := noJumpTestArgs
+		arg.initP = ^flagVBit
+		testDo(t, arg, bvs)
+
+		arg = jumpToSamePageTestArgs
+		arg.initP = flagVBit
+		testDo(t, arg, bvs)
+
+		arg = jumpToDifferentPageTestArgs
+		arg.initP = flagVBit
+		testDo(t, arg, bvs)
+	})
+}
