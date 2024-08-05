@@ -1,5 +1,6 @@
 LOCAL_BIN=$(CURDIR)/bin
 OUT_NAME=nestic
+TEST_COVER_OUT=cover.out
 
 
 .PHONY: .bindeps
@@ -21,7 +22,11 @@ lint: .bindeps
 
 .PHONY: test
 test:
-	go test -v -cover ./...
+	go test -v -cover -coverprofile $(TEST_COVER_OUT) ./...
+
+.PHONY: test-cover
+test-cover: test
+	go tool cover -html $(TEST_COVER_OUT)
 
 .PHONY: run
 run: build
