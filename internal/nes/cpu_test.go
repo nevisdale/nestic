@@ -21,6 +21,8 @@ func (m *memMock) Write8(addr uint16, data uint8) {
 }
 
 func Test_ADC(t *testing.T) {
+	t.Parallel()
+
 	type testArgs struct {
 		initA          uint8
 		operandValue   uint8
@@ -139,6 +141,8 @@ func Test_ADC(t *testing.T) {
 }
 
 func Test_AND(t *testing.T) {
+	t.Parallel()
+
 	type testArgs struct {
 		initA          uint8
 		operandValue   uint8
@@ -207,6 +211,8 @@ func Test_AND(t *testing.T) {
 }
 
 func Test_ASL(t *testing.T) {
+	t.Parallel()
+
 	t.Run("ACC with carry", func(t *testing.T) {
 		expectedA := uint8(0x6)
 		expectedP := flagCBit
@@ -270,6 +276,8 @@ func Test_ASL(t *testing.T) {
 }
 
 func Test_JmpWithCondition(t *testing.T) {
+	t.Parallel()
+
 	type testArgs struct {
 		initP           uint8
 		initPC          uint16
