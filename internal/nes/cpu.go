@@ -406,8 +406,7 @@ func (c *CPU) adc() {
 // An additional cycle is needed if the page boundary is crossed
 func (c *CPU) and() {
 	c.a &= c.operandValue
-	c.setFlag(flagZBit, c.a == 0)
-	c.setFlag(flagNBit, c.a&0x80 > 0)
+	c.setFlagsZN(c.a)
 	if c.pageCrossed {
 		c.cycles++
 	}

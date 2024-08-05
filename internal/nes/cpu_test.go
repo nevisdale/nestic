@@ -123,3 +123,71 @@ func Test_ADC(t *testing.T) {
 		})
 	})
 }
+
+func Test_AND(t *testing.T) {
+	type testArgs struct {
+		initA          uint8
+		operandValue   uint8
+		initP          uint8
+		expectedA      uint8
+		expectedP      uint8
+		pageCrossed    bool
+		expectedCycles uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		cpu := NewCPU(nil)
+		cpu.a = in.initA
+		cpu.p = in.initP
+		cpu.operandValue = in.operandValue
+		cpu.pageCrossed = in.pageCrossed
+
+		cpu.and()
+
+		assert.Equal(t, in.expectedA, cpu.a, "A register")
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+		assert.Equal(t, in.expectedCycles, cpu.cycles, "Cycles")
+	}
+
+	t.Run("ff&0f=0f", func(t *testing.T) {
+		testDo(t, testArgs{
+			initA:        0xff,
+			operandValue: 0x0f,
+			initP:        0,
+			expectedA:    0x0f,
+			expectedP:    0,
+		})
+	})
+
+	t.Run("ff&00=00", func(t *testing.T) {
+		testDo(t, testArgs{
+			initA:        0xff,
+			operandValue: 0x00,
+			initP:        0,
+			expectedA:    0x00,
+			expectedP:    flagZBit,
+		})
+	})
+
+	t.Run("ff&ff=ff", func(t *testing.T) {
+		testDo(t, testArgs{
+			initA:        0xff,
+			operandValue: 0xff,
+			initP:        0,
+			expectedA:    0xff,
+			expectedP:    flagNBit,
+		})
+	})
+
+	t.Run("add cycle if page crossed", func(t *testing.T) {
+		testDo(t, testArgs{
+			initA:          0,
+			operandValue:   0,
+			initP:          0,
+			expectedA:      0,
+			expectedP:      flagZBit,
+			pageCrossed:    true,
+			expectedCycles: 1,
+		})
+	})
+}
