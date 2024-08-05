@@ -7,13 +7,28 @@ type ReadWriter interface {
 	Write8(addr uint16, data uint8)
 }
 
-// $0000-$07FF: 2 KB of internal RAM
-// $0800-$1FFF: Mirrors of $0000-$07FF
-// $2000-$2007: PPU (Picture Processing Unit) registers
-// $2008-$3FFF: Mirrors of $2000-$2007 (every 8 bytes)
-// $4000-$4017: APU (Audio Processing Unit) and I/O registers
-// $4018-$401F: APU and I/O functionality that is normally disabled
-// $4020-$FFFF: Cartridge space, including PRG-ROM, PRG-RAM, and mapper registers
+// CPU MEMORY MAP
+//
+// PRG-ROM
+// 0xC000 - 0x10000: Upper PRG-ROM bank
+// 0x8000 - 0xC000: Lower PRG-ROM bank
+//
+// SRAM
+// 0x6000 - 0x8000: SRAM
+//
+// EXPANSION ROM
+// 0x4020 - 0x6000: Expansion ROM
+//
+// IO REGISTERS
+// 0x4000 - 0x4020: I/O Registers
+// 0x2008 - 0x4000: Mirrors of 0x2000-0x2008
+// 0x2000 - 0x2008: PPU Registers
+//
+// RAM
+// 0x0800 - 0x2000: Mirrors of 0x0000-0x0800
+// 0x0200 - 0x0800: RAM
+// 0x0100 - 0x0200: STACK
+// 0x0000 - 0x0100: ZERO PAGE
 type cpuMemory struct {
 	bus *Bus
 }
