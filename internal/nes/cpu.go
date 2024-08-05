@@ -46,17 +46,13 @@ func (a addrMode) String() string {
 		return "INDY"
 	case addrModeREL:
 		return "REL"
-
 	case addrModeACC:
 		return "ACC"
 	case addrModeIMP:
 		return "IMP"
-
 	default:
 		return "UNKNOWN"
-
 	}
-
 }
 
 const (
