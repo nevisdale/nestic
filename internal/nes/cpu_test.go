@@ -4,7 +4,21 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
+
+type memMock struct {
+	mock.Mock
+}
+
+func (m *memMock) Read8(addr uint16) uint8 {
+	args := m.Called(addr)
+	return args.Get(0).(uint8)
+}
+
+func (m *memMock) Write8(addr uint16, data uint8) {
+	m.Called(addr, data)
+}
 
 func Test_ADC(t *testing.T) {
 	type testArgs struct {
@@ -189,5 +203,68 @@ func Test_AND(t *testing.T) {
 			pageCrossed:    true,
 			expectedCycles: 1,
 		})
+	})
+}
+
+func Test_ASL(t *testing.T) {
+	t.Run("ACC with carry", func(t *testing.T) {
+		expectedA := uint8(0x6)
+		expectedP := flagCBit
+		cpu := NewCPU(nil)
+		cpu.operandValue = 0x83
+		cpu.p = 0
+		cpu.addrMode = addrModeACC
+
+		cpu.asl()
+
+		assert.Equal(t, expectedA, cpu.a, "A register")
+		assert.Equal(t, expectedP, cpu.p, "P register")
+	})
+
+	t.Run("ACC with negative", func(t *testing.T) {
+		expectedA := uint8(0x82)
+		expectedP := flagNBit
+		cpu := NewCPU(nil)
+		cpu.operandValue = 0x41
+		cpu.p = 0
+		cpu.addrMode = addrModeACC
+
+		cpu.asl()
+
+		assert.Equal(t, expectedA, cpu.a, "A register")
+		assert.Equal(t, expectedP, cpu.p, "P register")
+	})
+
+	t.Run("ACC with zero", func(t *testing.T) {
+		expectedA := uint8(0)
+		expectedP := flagZBit
+		cpu := NewCPU(nil)
+		cpu.operandValue = 0x0
+		cpu.p = 0
+		cpu.addrMode = addrModeACC
+
+		cpu.asl()
+
+		assert.Equal(t, expectedA, cpu.a, "A register")
+		assert.Equal(t, expectedP, cpu.p, "P register")
+	})
+
+	t.Run("ZP simple", func(t *testing.T) {
+		expectedAddr := uint16(0xff)
+		expectedValue := uint8(0x24)
+		mem := new(memMock)
+		mem.On("Write8", expectedAddr, expectedValue).Return()
+
+		expectedP := uint8(0)
+		cpu := NewCPU(mem)
+		cpu.p = 0
+		cpu.operandValue = 0x12
+		cpu.operandAddr = expectedAddr
+		cpu.addrMode = addrModeZP
+
+		cpu.asl()
+
+		assert.Equal(t, expectedP, cpu.p, "P register")
+		mem.AssertExpectations(t)
 	})
 }

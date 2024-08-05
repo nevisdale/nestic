@@ -417,11 +417,9 @@ func (c *CPU) and() {
 //
 // Flags affected: C, Z, N
 func (c *CPU) asl() {
-	r16 := uint16(c.operandValue) << 1
-	r8 := uint8(r16)
-	c.setFlag(flagCBit, r16 > 0xff)
-	c.setFlag(flagZBit, r8 == 0)
-	c.setFlag(flagNBit, r8&0x80 > 0)
+	c.setFlag(flagCBit, c.operandValue&0x80 > 0)
+	r8 := c.operandValue << 1
+	c.setFlagsZN(r8)
 	if c.addrMode == addrModeACC {
 		c.a = r8
 	} else {
