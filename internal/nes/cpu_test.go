@@ -581,3 +581,40 @@ func Test_SetClearP(t *testing.T) {
 		})
 	}
 }
+
+func Test_BRK(t *testing.T) {
+	t.Parallel()
+
+	initPc := uint16(0x1000)
+	initP := uint8(v2.N(0x100)) & ^flagBBit
+	initSp := uint8(0x10)
+	expectedPc := uint16(0xdead)
+	expectedP := initP | flagIBit
+	mem := new(memMock)
+
+	cpu := NewCPU(mem)
+	cpu.pc = initPc
+	cpu.p = initP
+	cpu.sp = initSp
+
+	// push pc to stack
+	initPc++
+	mem.On("Write8", uint16(initSp)|uint16(stackStartAddr), uint8(initPc>>8)).Return() // high byte
+	initSp--
+	mem.On("Write8", uint16(initSp)|uint16(stackStartAddr), uint8(initPc)).Return() // low byte
+	initSp--
+
+	// push p to stack
+	mem.On("Write8", uint16(initSp)|stackStartAddr, initP|flagBBit).Return()
+
+	// read pc from vector
+	mem.On("Read8", uint16(0xfffe)).Return(uint8(expectedPc))      // low byte
+	mem.On("Read8", uint16(0xffff)).Return(uint8(expectedPc >> 8)) // high byte
+
+	cpu.brk()
+
+	assert.Equal(t, expectedPc, cpu.pc, "PC register")
+	assert.Equal(t, expectedP, cpu.p, "P register")
+
+	mem.AssertExpectations(t)
+}

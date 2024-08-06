@@ -534,10 +534,8 @@ func (c *CPU) bpl() {
 func (c *CPU) brk() {
 	c.pc++
 	c.stackPush16(c.pc)
+	c.stackPush8(c.p | flagBBit)
 	c.setFlag(flagIBit, true)
-	c.setFlag(flagBBit, true)
-	c.stackPush8(c.p)
-	c.setFlag(flagBBit, false)
 	c.pc = c.read16(0xfffe)
 }
 
