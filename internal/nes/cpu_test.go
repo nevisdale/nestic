@@ -752,3 +752,59 @@ func Test_CPX(t *testing.T) {
 		})
 	})
 }
+
+func Test_CPY(t *testing.T) {
+	type testArgs struct {
+		initY        uint8
+		operandValue uint8
+		initP        uint8
+		expectedP    uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		cpu := NewCPU(nil)
+		cpu.y = in.initY
+		cpu.p = in.initP
+		cpu.operandValue = in.operandValue
+
+		cpu.cpy()
+
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+	}
+
+	t.Run("Y=operand", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagCBit | flagZBit) & ^flagNBit
+
+		testDo(t, testArgs{
+			initY:        0x10,
+			operandValue: 0x10,
+			initP:        p,
+			expectedP:    expectedP,
+		})
+	})
+
+	t.Run("Y>operand", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagCBit) & ^(flagNBit | flagZBit)
+
+		testDo(t, testArgs{
+			initY:        0x10,
+			operandValue: 0x0f,
+			initP:        p,
+			expectedP:    expectedP,
+		})
+	})
+
+	t.Run("Y<operand", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagNBit) & ^(flagCBit | flagZBit)
+
+		testDo(t, testArgs{
+			initY:        0x0f,
+			operandValue: 0x10,
+			initP:        p,
+			expectedP:    expectedP,
+		})
+	})
+}

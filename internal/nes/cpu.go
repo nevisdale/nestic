@@ -629,8 +629,7 @@ func (c *CPU) cpx() {
 func (c *CPU) cpy() {
 	r := c.y - c.operandValue
 	c.setFlag(flagCBit, c.y >= c.operandValue)
-	c.setFlag(flagZBit, r == 0)
-	c.setFlag(flagNBit, r&0x80 > 0)
+	c.setFlagsZN(r)
 }
 
 // Decrement Memory
