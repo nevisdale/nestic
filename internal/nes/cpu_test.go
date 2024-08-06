@@ -696,6 +696,8 @@ func Test_CMP(t *testing.T) {
 }
 
 func Test_CPX(t *testing.T) {
+	t.Parallel()
+
 	type testArgs struct {
 		initX        uint8
 		operandValue uint8
