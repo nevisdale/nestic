@@ -635,8 +635,7 @@ func (c *CPU) cpy() {
 // Flags affected: Z, N
 func (c *CPU) dec() {
 	r := c.operandValue - 1
-	c.setFlag(flagZBit, r == 0)
-	c.setFlag(flagNBit, r&0x80 > 0)
+	c.setFlagsZN(r)
 	c.write8(c.operandAddr, r)
 }
 
@@ -646,8 +645,7 @@ func (c *CPU) dec() {
 // Flags affected: Z, N
 func (c *CPU) dex() {
 	c.x--
-	c.setFlag(flagZBit, c.x == 0)
-	c.setFlag(flagNBit, c.x&0x80 > 0)
+	c.setFlagsZN(c.x)
 }
 
 // Decrement Y Register
@@ -656,8 +654,7 @@ func (c *CPU) dex() {
 // Flags affected: Z, N
 func (c *CPU) dey() {
 	c.y--
-	c.setFlag(flagZBit, c.y == 0)
-	c.setFlag(flagNBit, c.y&0x80 > 0)
+	c.setFlagsZN(c.y)
 }
 
 // Exclusive OR

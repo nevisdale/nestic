@@ -808,3 +808,113 @@ func Test_CPY(t *testing.T) {
 		})
 	})
 }
+
+func Test_DEC(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set N", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagNBit) & ^flagZBit
+		expectedAddr := uint16(0xff)
+		expectedValue := uint8(0x00)
+		mem := new(memMock)
+		mem.On("Write8", expectedAddr, expectedValue-1).Return()
+
+		cpu := NewCPU(mem)
+		cpu.p = initP
+		cpu.operandValue = expectedValue
+		cpu.operandAddr = expectedAddr
+
+		cpu.dec()
+
+		assert.Equal(t, expectedP, cpu.p, "P register")
+		mem.AssertExpectations(t)
+	})
+
+	t.Run("set Z", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagZBit) & ^flagNBit
+		expectedAddr := uint16(0xff)
+		expectedValue := uint8(0x01)
+		mem := new(memMock)
+		mem.On("Write8", expectedAddr, expectedValue-1).Return()
+
+		cpu := NewCPU(mem)
+		cpu.p = initP
+		cpu.operandValue = expectedValue
+		cpu.operandAddr = expectedAddr
+
+		cpu.dec()
+
+		assert.Equal(t, expectedP, cpu.p, "P register")
+		mem.AssertExpectations(t)
+	})
+}
+
+func Test_DEX(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set N", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagNBit) & ^flagZBit
+		expectedValue := uint8(0x00)
+
+		cpu := NewCPU(nil)
+		cpu.p = initP
+		cpu.x = expectedValue
+
+		cpu.dex()
+
+		assert.Equal(t, expectedP, cpu.p, "P register")
+		assert.Equal(t, expectedValue-1, cpu.x, "X register")
+	})
+
+	t.Run("set Z", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagZBit) & ^flagNBit
+		expectedValue := uint8(0x01)
+
+		cpu := NewCPU(nil)
+		cpu.p = initP
+		cpu.x = expectedValue
+
+		cpu.dex()
+
+		assert.Equal(t, expectedP, cpu.p, "P register")
+		assert.Equal(t, expectedValue-1, cpu.x, "X register")
+	})
+}
+
+func Test_DEY(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set N", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagNBit) & ^flagZBit
+		expectedValue := uint8(0x00)
+
+		cpu := NewCPU(nil)
+		cpu.p = initP
+		cpu.y = expectedValue
+
+		cpu.dey()
+
+		assert.Equal(t, expectedP, cpu.p, "P register")
+		assert.Equal(t, expectedValue-1, cpu.y, "Y register")
+	})
+
+	t.Run("set Z", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagZBit) & ^flagNBit
+		expectedValue := uint8(0x01)
+
+		cpu := NewCPU(nil)
+		cpu.p = initP
+		cpu.y = expectedValue
+
+		cpu.dey()
+
+		assert.Equal(t, expectedP, cpu.p, "P register")
+		assert.Equal(t, expectedValue-1, cpu.y, "Y register")
+	})
+}
