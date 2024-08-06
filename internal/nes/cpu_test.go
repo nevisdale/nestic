@@ -618,3 +618,91 @@ func Test_BRK(t *testing.T) {
 
 	mem.AssertExpectations(t)
 }
+
+func Test_CMP(t *testing.T) {
+	t.Parallel()
+
+	type testArgs struct {
+		initA          uint8
+		operandValue   uint8
+		initP          uint8
+		expectedP      uint8
+		expectedCycles uint8
+		pageCrossed    bool
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		cpu := NewCPU(nil)
+		cpu.a = in.initA
+		cpu.p = in.initP
+		cpu.operandValue = in.operandValue
+		cpu.pageCrossed = in.pageCrossed
+
+		cpu.cmp()
+
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+		assert.Equal(t, in.expectedCycles, cpu.cycles, "Cycles")
+	}
+
+	t.Run("A=operand", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := p
+		expectedP |= flagCBit
+		expectedP |= flagZBit
+		expectedP &^= flagNBit
+
+		testDo(t, testArgs{
+			initA:        0x10,
+			operandValue: 0x10,
+			initP:        p,
+			expectedP:    expectedP,
+		})
+	})
+
+	t.Run("A>operand", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := p
+		expectedP |= flagCBit
+		expectedP &^= flagNBit
+		expectedP &^= flagZBit
+
+		testDo(t, testArgs{
+			initA:        0x10,
+			operandValue: 0x0f,
+			initP:        p,
+			expectedP:    expectedP,
+		})
+	})
+
+	t.Run("A<operand", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := p
+		expectedP &^= flagCBit
+		expectedP |= flagNBit
+		expectedP &^= flagZBit
+
+		testDo(t, testArgs{
+			initA:        0x0f,
+			operandValue: 0x10,
+			initP:        p,
+			expectedP:    expectedP,
+		})
+	})
+
+	t.Run("add cycle if page crossed", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := p
+		expectedP |= flagCBit
+		expectedP |= flagZBit
+		expectedP &^= flagNBit
+
+		testDo(t, testArgs{
+			initA:          0x10,
+			operandValue:   0x10,
+			initP:          p,
+			expectedP:      expectedP,
+			expectedCycles: 1,
+			pageCrossed:    true,
+		})
+	})
+}

@@ -606,8 +606,7 @@ func (c *CPU) clv() {
 func (c *CPU) cmp() {
 	r := c.a - c.operandValue
 	c.setFlag(flagCBit, c.a >= c.operandValue)
-	c.setFlag(flagZBit, r == 0)
-	c.setFlag(flagNBit, r&0x80 > 0)
+	c.setFlagsZN(r)
 	if c.pageCrossed {
 		c.cycles++
 	}
