@@ -646,10 +646,7 @@ func Test_CMP(t *testing.T) {
 
 	t.Run("A=operand", func(t *testing.T) {
 		p := uint8(v2.N(0x100))
-		expectedP := p
-		expectedP |= flagCBit
-		expectedP |= flagZBit
-		expectedP &^= flagNBit
+		expectedP := (p | flagCBit | flagZBit) & ^flagNBit
 
 		testDo(t, testArgs{
 			initA:        0x10,
@@ -661,10 +658,7 @@ func Test_CMP(t *testing.T) {
 
 	t.Run("A>operand", func(t *testing.T) {
 		p := uint8(v2.N(0x100))
-		expectedP := p
-		expectedP |= flagCBit
-		expectedP &^= flagNBit
-		expectedP &^= flagZBit
+		expectedP := (p | flagCBit) & ^(flagNBit | flagZBit)
 
 		testDo(t, testArgs{
 			initA:        0x10,
@@ -676,10 +670,7 @@ func Test_CMP(t *testing.T) {
 
 	t.Run("A<operand", func(t *testing.T) {
 		p := uint8(v2.N(0x100))
-		expectedP := p
-		expectedP &^= flagCBit
-		expectedP |= flagNBit
-		expectedP &^= flagZBit
+		expectedP := (p | flagNBit) & ^(flagCBit | flagZBit)
 
 		testDo(t, testArgs{
 			initA:        0x0f,
@@ -691,10 +682,7 @@ func Test_CMP(t *testing.T) {
 
 	t.Run("add cycle if page crossed", func(t *testing.T) {
 		p := uint8(v2.N(0x100))
-		expectedP := p
-		expectedP |= flagCBit
-		expectedP |= flagZBit
-		expectedP &^= flagNBit
+		expectedP := (p | flagCBit | flagZBit) & ^flagNBit
 
 		testDo(t, testArgs{
 			initA:          0x10,
