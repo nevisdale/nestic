@@ -619,8 +619,7 @@ func (c *CPU) cmp() {
 func (c *CPU) cpx() {
 	r := c.x - c.operandValue
 	c.setFlag(flagCBit, c.x >= c.operandValue)
-	c.setFlag(flagZBit, r == 0)
-	c.setFlag(flagNBit, r&0x80 > 0)
+	c.setFlagsZN(r)
 }
 
 // Compare Y Register
