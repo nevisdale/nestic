@@ -1,6 +1,7 @@
 package nes
 
 import (
+	v2 "math/rand/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -497,4 +498,84 @@ func Test_Bit(t *testing.T) {
 			expectedP:    flagVBit,
 		})
 	})
+}
+
+func Test_SetClearP(t *testing.T) {
+	type testArgs struct {
+		initP     uint8
+		expectedP uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs, do func(cpu *CPU)) {
+		cpu := NewCPU(nil)
+		cpu.p = in.initP
+
+		do(cpu)
+
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+	}
+
+	randomP := func() uint8 {
+		return uint8(v2.N(0x100))
+	}
+
+	testsClear := []struct {
+		name        string
+		f           uint8
+		cpuDo       func(cpu *CPU)
+		expectedPDo func(p uint8) uint8
+	}{
+		{
+			name:        "CLC",
+			f:           flagCBit,
+			cpuDo:       func(cpu *CPU) { cpu.clc() },
+			expectedPDo: func(p uint8) uint8 { return p & ^flagCBit },
+		},
+		{
+			name:        "CLD",
+			f:           flagDBit,
+			cpuDo:       func(cpu *CPU) { cpu.cld() },
+			expectedPDo: func(p uint8) uint8 { return p & ^flagDBit },
+		},
+		{
+			name:        "CLI",
+			f:           flagIBit,
+			cpuDo:       func(cpu *CPU) { cpu.cli() },
+			expectedPDo: func(p uint8) uint8 { return p & ^flagIBit },
+		},
+		{
+			name:        "CLV",
+			f:           flagVBit,
+			cpuDo:       func(cpu *CPU) { cpu.clv() },
+			expectedPDo: func(p uint8) uint8 { return p & ^flagVBit },
+		},
+		{
+			name:        "SEC",
+			f:           flagCBit,
+			cpuDo:       func(cpu *CPU) { cpu.sec() },
+			expectedPDo: func(p uint8) uint8 { return p | flagCBit },
+		},
+		{
+			name:        "SED",
+			f:           flagDBit,
+			cpuDo:       func(cpu *CPU) { cpu.sed() },
+			expectedPDo: func(p uint8) uint8 { return p | flagDBit },
+		},
+		{
+			name:        "SEI",
+			f:           flagIBit,
+			cpuDo:       func(cpu *CPU) { cpu.sei() },
+			expectedPDo: func(p uint8) uint8 { return p | flagIBit },
+		},
+	}
+
+	for _, tt := range testsClear {
+		t.Run(tt.name, func(t *testing.T) {
+			p := randomP() | tt.f
+			testDo(t, testArgs{initP: p, expectedP: tt.expectedPDo(p)}, tt.cpuDo)
+
+			p = randomP() & ^tt.f
+			testDo(t, testArgs{initP: p, expectedP: tt.expectedPDo(p)}, tt.cpuDo)
+		})
+	}
 }
