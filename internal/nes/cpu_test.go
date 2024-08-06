@@ -501,6 +501,8 @@ func Test_Bit(t *testing.T) {
 }
 
 func Test_SetClearP(t *testing.T) {
+	t.Parallel()
+
 	type testArgs struct {
 		initP     uint8
 		expectedP uint8
