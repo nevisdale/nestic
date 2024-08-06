@@ -604,9 +604,8 @@ func (c *CPU) clv() {
 //
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) cmp() {
-	r := c.a - c.operandValue
 	c.setFlag(flagCBit, c.a >= c.operandValue)
-	c.setFlagsZN(r)
+	c.setFlagsZN(c.a - c.operandValue)
 	if c.pageCrossed {
 		c.cycles++
 	}
@@ -617,9 +616,8 @@ func (c *CPU) cmp() {
 //
 // Flags affected: C, Z, N
 func (c *CPU) cpx() {
-	r := c.x - c.operandValue
 	c.setFlag(flagCBit, c.x >= c.operandValue)
-	c.setFlagsZN(r)
+	c.setFlagsZN(c.x - c.operandValue)
 }
 
 // Compare Y Register
@@ -627,9 +625,8 @@ func (c *CPU) cpx() {
 //
 // Flags affected: C, Z, N
 func (c *CPU) cpy() {
-	r := c.y - c.operandValue
 	c.setFlag(flagCBit, c.y >= c.operandValue)
-	c.setFlagsZN(r)
+	c.setFlagsZN(c.y - c.operandValue)
 }
 
 // Decrement Memory
