@@ -21,6 +21,18 @@ func (m *memMock) Write8(addr uint16, data uint8) {
 	m.Called(addr, data)
 }
 
+type fakeMem struct {
+	data [0x10000]uint8
+}
+
+func (m fakeMem) Read8(addr uint16) uint8 {
+	return m.data[addr]
+}
+
+func (m *fakeMem) Write8(addr uint16, data uint8) {
+	m.data[addr] = data
+}
+
 func Test_ADC(t *testing.T) {
 	t.Parallel()
 
@@ -1152,4 +1164,34 @@ func Test_INY(t *testing.T) {
 			expectedY: 0x01,
 		})
 	})
+}
+
+func Test_JMP(t *testing.T) {
+	t.Parallel()
+
+	cpu := NewCPU(nil)
+	cpu.operandAddr = 0x1000
+	cpu.pc = 0x2000
+
+	cpu.jmp()
+
+	assert.Equal(t, uint16(0x1000), cpu.pc, "PC register")
+}
+
+func Test_JSR(t *testing.T) {
+	t.Parallel()
+
+	initPc := uint16(0x1000)
+	expectedPc := uint16(0x2000)
+	mem := new(fakeMem)
+
+	cpu := NewCPU(mem)
+	cpu.pc = initPc
+	cpu.operandAddr = expectedPc
+
+	cpu.jsr()
+
+	assert.Equal(t, expectedPc, cpu.pc, "PC register")
+	oldPc := cpu.stackPop16()
+	assert.Equal(t, initPc-1, oldPc, "Old PC")
 }
