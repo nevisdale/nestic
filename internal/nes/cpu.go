@@ -677,8 +677,7 @@ func (c *CPU) eor() {
 // Flags affected: Z, N
 func (c *CPU) inc() {
 	r := c.operandValue + 1
-	c.setFlag(flagZBit, r == 0)
-	c.setFlag(flagNBit, r&0x80 > 0)
+	c.setFlagsZN(r)
 	c.write8(c.operandAddr, r)
 }
 
@@ -688,8 +687,7 @@ func (c *CPU) inc() {
 // Flags affected: Z, N
 func (c *CPU) inx() {
 	c.x++
-	c.setFlag(flagZBit, c.x == 0)
-	c.setFlag(flagNBit, c.x&0x80 > 0)
+	c.setFlagsZN(c.x)
 }
 
 // Increment Y Register
@@ -698,8 +696,7 @@ func (c *CPU) inx() {
 // Flags affected: Z, N
 func (c *CPU) iny() {
 	c.y++
-	c.setFlag(flagZBit, c.y == 0)
-	c.setFlag(flagNBit, c.y&0x80 > 0)
+	c.setFlagsZN(c.y)
 }
 
 // Jump

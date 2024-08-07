@@ -984,3 +984,172 @@ func Test_EOR(t *testing.T) {
 		})
 	})
 }
+
+func Test_INC(t *testing.T) {
+	t.Parallel()
+
+	type testArgs struct {
+		initP         uint8
+		expectedP     uint8
+		expectedValue uint8
+		expectedAddr  uint16
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		mem := new(memMock)
+		mem.On("Write8", in.expectedAddr, in.expectedValue+1).Return()
+
+		cpu := NewCPU(mem)
+		cpu.p = in.initP
+		cpu.operandValue = in.expectedValue
+		cpu.operandAddr = in.expectedAddr
+
+		cpu.inc()
+
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+		mem.AssertExpectations(t)
+	}
+
+	t.Run("set Z", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initP:         initP,
+			expectedP:     expectedP,
+			expectedValue: 0xff,
+			expectedAddr:  0xff,
+		})
+	})
+
+	t.Run("set N", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagNBit) & ^flagZBit
+		testDo(t, testArgs{
+			initP:         initP,
+			expectedP:     expectedP,
+			expectedValue: 0x7f,
+			expectedAddr:  0xff,
+		})
+	})
+
+	t.Run("positive value", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := initP & ^(flagZBit | flagNBit)
+		testDo(t, testArgs{
+			initP:         initP,
+			expectedP:     expectedP,
+			expectedValue: 0x00,
+			expectedAddr:  0xff,
+		})
+	})
+}
+
+func Test_INX(t *testing.T) {
+	t.Parallel()
+
+	type testArgs struct {
+		initP     uint8
+		expectedP uint8
+		initX     uint8
+		expectedX uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		cpu := NewCPU(nil)
+		cpu.p = in.initP
+		cpu.x = in.initX
+
+		cpu.inx()
+
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+		assert.Equal(t, in.expectedX, cpu.x, "X register")
+	}
+
+	t.Run("set Z", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initP:     initP,
+			expectedP: expectedP,
+			initX:     0xff,
+			expectedX: 0x00,
+		})
+	})
+
+	t.Run("set N", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagNBit) & ^flagZBit
+		testDo(t, testArgs{
+			initP:     initP,
+			expectedP: expectedP,
+			initX:     0x7f,
+			expectedX: 0x80,
+		})
+	})
+
+	t.Run("positive value", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := initP & ^(flagZBit | flagNBit)
+		testDo(t, testArgs{
+			initP:     initP,
+			expectedP: expectedP,
+			initX:     0x00,
+			expectedX: 0x01,
+		})
+	})
+}
+
+func Test_INY(t *testing.T) {
+	t.Parallel()
+
+	type testArgs struct {
+		initP     uint8
+		expectedP uint8
+		initY     uint8
+		expectedY uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		cpu := NewCPU(nil)
+		cpu.p = in.initP
+		cpu.y = in.initY
+
+		cpu.iny()
+
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+		assert.Equal(t, in.expectedY, cpu.y, "Y register")
+	}
+
+	t.Run("set Z", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initP:     initP,
+			expectedP: expectedP,
+			initY:     0xff,
+			expectedY: 0x00,
+		})
+	})
+
+	t.Run("set N", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := (initP | flagNBit) & ^flagZBit
+		testDo(t, testArgs{
+			initP:     initP,
+			expectedP: expectedP,
+			initY:     0x7f,
+			expectedY: 0x80,
+		})
+	})
+
+	t.Run("positive value", func(t *testing.T) {
+		initP := uint8(v2.N(0x100))
+		expectedP := initP & ^(flagZBit | flagNBit)
+		testDo(t, testArgs{
+			initP:     initP,
+			expectedP: expectedP,
+			initY:     0x00,
+			expectedY: 0x01,
+		})
+	})
+}
