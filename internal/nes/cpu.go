@@ -665,8 +665,7 @@ func (c *CPU) dey() {
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) eor() {
 	c.a ^= c.operandValue
-	c.setFlag(flagZBit, c.a == 0)
-	c.setFlag(flagNBit, c.a&0x80 > 0)
+	c.setFlagsZN(c.a)
 	if c.pageCrossed {
 		c.cycles++
 	}

@@ -918,3 +918,69 @@ func Test_DEY(t *testing.T) {
 		assert.Equal(t, expectedValue-1, cpu.y, "Y register")
 	})
 }
+
+func Test_EOR(t *testing.T) {
+	t.Parallel()
+
+	type testArgs struct {
+		initA          uint8
+		operandValue   uint8
+		initP          uint8
+		expectedA      uint8
+		expectedP      uint8
+		pageCrossed    bool
+		expectedCycles uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		cpu := NewCPU(nil)
+		cpu.a = in.initA
+		cpu.p = in.initP
+		cpu.operandValue = in.operandValue
+		cpu.pageCrossed = in.pageCrossed
+
+		cpu.eor()
+
+		assert.Equal(t, in.expectedA, cpu.a, "A register")
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+		assert.Equal(t, in.expectedCycles, cpu.cycles, "Cycles")
+	}
+
+	t.Run("Z bit", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initA:        0x0f,
+			operandValue: 0x0f,
+			initP:        p,
+			expectedA:    0x00,
+			expectedP:    expectedP,
+		})
+	})
+
+	t.Run("N bit", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagNBit) & ^flagZBit
+		testDo(t, testArgs{
+			initA:        0x80,
+			operandValue: 0x40,
+			initP:        p,
+			expectedA:    0xc0,
+			expectedP:    expectedP,
+		})
+	})
+
+	t.Run("add cycle if page crossed", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initA:          0x0f,
+			operandValue:   0x0f,
+			initP:          p,
+			expectedA:      0x00,
+			expectedP:      expectedP,
+			expectedCycles: 1,
+			pageCrossed:    true,
+		})
+	})
+}
