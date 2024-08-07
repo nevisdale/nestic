@@ -1169,18 +1169,22 @@ func Test_INY(t *testing.T) {
 func Test_JMP(t *testing.T) {
 	t.Parallel()
 
+	p := uint8(v2.N(0x100))
 	cpu := NewCPU(nil)
 	cpu.operandAddr = 0x1000
 	cpu.pc = 0x2000
+	cpu.p = p
 
 	cpu.jmp()
 
 	assert.Equal(t, uint16(0x1000), cpu.pc, "PC register")
+	assert.Equal(t, p, cpu.p, "P register")
 }
 
 func Test_JSR(t *testing.T) {
 	t.Parallel()
 
+	p := uint8(v2.N(0x100))
 	initPc := uint16(0x1000)
 	expectedPc := uint16(0x2000)
 	mem := new(fakeMem)
@@ -1188,10 +1192,12 @@ func Test_JSR(t *testing.T) {
 	cpu := NewCPU(mem)
 	cpu.pc = initPc
 	cpu.operandAddr = expectedPc
+	cpu.p = p
 
 	cpu.jsr()
 
 	assert.Equal(t, expectedPc, cpu.pc, "PC register")
 	oldPc := cpu.stackPop16()
 	assert.Equal(t, initPc-1, oldPc, "Old PC")
+	assert.Equal(t, p, cpu.p, "P register")
 }
