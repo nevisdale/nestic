@@ -725,8 +725,7 @@ func (c *CPU) jsr() {
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) lda() {
 	c.a = c.operandValue
-	c.setFlag(flagZBit, c.a == 0)
-	c.setFlag(flagNBit, c.a&0x80 > 0)
+	c.setFlagsZN(c.a)
 	if c.pageCrossed {
 		c.cycles++
 	}
@@ -740,8 +739,7 @@ func (c *CPU) lda() {
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) ldx() {
 	c.x = c.operandValue
-	c.setFlag(flagZBit, c.x == 0)
-	c.setFlag(flagNBit, c.x&0x80 > 0)
+	c.setFlagsZN(c.x)
 	if c.pageCrossed {
 		c.cycles++
 	}
@@ -755,8 +753,7 @@ func (c *CPU) ldx() {
 // An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) ldy() {
 	c.y = c.operandValue
-	c.setFlag(flagZBit, c.y == 0)
-	c.setFlag(flagNBit, c.y&0x80 > 0)
+	c.setFlagsZN(c.y)
 	if c.pageCrossed {
 		c.cycles++
 	}

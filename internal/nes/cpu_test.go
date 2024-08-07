@@ -1201,3 +1201,219 @@ func Test_JSR(t *testing.T) {
 	assert.Equal(t, initPc-1, oldPc, "Old PC")
 	assert.Equal(t, p, cpu.p, "P register")
 }
+
+func Test_LDA(t *testing.T) {
+	t.Parallel()
+
+	type testArgs struct {
+		initP          uint8
+		operandValue   uint8
+		expectedP      uint8
+		expectedA      uint8
+		pageCrossed    bool
+		expectedCycles uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		cpu := NewCPU(nil)
+		cpu.p = in.initP
+		cpu.operandValue = in.operandValue
+		cpu.pageCrossed = in.pageCrossed
+
+		cpu.lda()
+
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+		assert.Equal(t, in.expectedA, cpu.a, "A register")
+		assert.Equal(t, in.expectedCycles, cpu.cycles, "Cycles")
+	}
+
+	t.Run("Z bit", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initP:        p,
+			operandValue: 0x00,
+			expectedP:    expectedP,
+			expectedA:    0x00,
+		})
+	})
+
+	t.Run("N bit", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagNBit) & ^flagZBit
+		testDo(t, testArgs{
+			initP:        p,
+			operandValue: 0x80,
+			expectedP:    expectedP,
+			expectedA:    0x80,
+		})
+	})
+
+	t.Run("add cycle if page crossed", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initP:          p,
+			operandValue:   0x00,
+			expectedP:      expectedP,
+			expectedA:      0x00,
+			expectedCycles: 1,
+			pageCrossed:    true,
+		})
+	})
+
+	t.Run("positive value", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := p & ^(flagZBit | flagNBit)
+		testDo(t, testArgs{
+			initP:        p,
+			operandValue: 0x01,
+			expectedA:    0x01,
+			expectedP:    expectedP,
+		})
+	})
+}
+
+func Test_LDX(t *testing.T) {
+	t.Parallel()
+
+	type testArgs struct {
+		initP          uint8
+		operandValue   uint8
+		expectedP      uint8
+		expectedX      uint8
+		pageCrossed    bool
+		expectedCycles uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		cpu := NewCPU(nil)
+		cpu.p = in.initP
+		cpu.operandValue = in.operandValue
+		cpu.pageCrossed = in.pageCrossed
+
+		cpu.ldx()
+
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+		assert.Equal(t, in.expectedX, cpu.x, "X register")
+		assert.Equal(t, in.expectedCycles, cpu.cycles, "Cycles")
+	}
+
+	t.Run("Z bit", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initP:        p,
+			operandValue: 0x00,
+			expectedP:    expectedP,
+			expectedX:    0x00,
+		})
+	})
+
+	t.Run("N bit", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagNBit) & ^flagZBit
+		testDo(t, testArgs{
+			initP:        p,
+			operandValue: 0x80,
+			expectedP:    expectedP,
+			expectedX:    0x80,
+		})
+	})
+
+	t.Run("add cycle if page crossed", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initP:          p,
+			operandValue:   0x00,
+			expectedP:      expectedP,
+			expectedX:      0x00,
+			expectedCycles: 1,
+			pageCrossed:    true,
+		})
+	})
+
+	t.Run("positive value", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := p & ^(flagZBit | flagNBit)
+		testDo(t, testArgs{
+			initP:        p,
+			operandValue: 0x01,
+			expectedX:    0x01,
+			expectedP:    expectedP,
+		})
+	})
+}
+
+func Test_LDY(t *testing.T) {
+	t.Parallel()
+
+	type testArgs struct {
+		initP          uint8
+		operandValue   uint8
+		expectedP      uint8
+		expectedY      uint8
+		pageCrossed    bool
+		expectedCycles uint8
+	}
+
+	testDo := func(t *testing.T, in testArgs) {
+		cpu := NewCPU(nil)
+		cpu.p = in.initP
+		cpu.operandValue = in.operandValue
+		cpu.pageCrossed = in.pageCrossed
+
+		cpu.ldy()
+
+		assert.Equal(t, in.expectedP, cpu.p, "P register")
+		assert.Equal(t, in.expectedY, cpu.y, "Y register")
+		assert.Equal(t, in.expectedCycles, cpu.cycles, "Cycles")
+	}
+
+	t.Run("Z bit", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initP:        p,
+			operandValue: 0x00,
+			expectedP:    expectedP,
+			expectedY:    0x00,
+		})
+	})
+
+	t.Run("N bit", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagNBit) & ^flagZBit
+		testDo(t, testArgs{
+			initP:        p,
+			operandValue: 0x80,
+			expectedP:    expectedP,
+			expectedY:    0x80,
+		})
+	})
+
+	t.Run("add cycle if page crossed", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := (p | flagZBit) & ^flagNBit
+		testDo(t, testArgs{
+			initP:          p,
+			operandValue:   0x00,
+			expectedP:      expectedP,
+			expectedY:      0x00,
+			expectedCycles: 1,
+			pageCrossed:    true,
+		})
+	})
+
+	t.Run("positive value", func(t *testing.T) {
+		p := uint8(v2.N(0x100))
+		expectedP := p & ^(flagZBit | flagNBit)
+		testDo(t, testArgs{
+			initP:        p,
+			operandValue: 0x01,
+			expectedY:    0x01,
+			expectedP:    expectedP,
+		})
+	})
+}
