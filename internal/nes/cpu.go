@@ -5,147 +5,68 @@ import (
 )
 
 const (
-	// The stack is located in the fixed memory page $0100 to $01FF.
-	stackStartAddr = 0x1000
+	stackStartAddr = uint16(0x100)
 )
 
 const (
-	flagCBit = uint8(1 << 0) // Carry flag
-	flagZBit = uint8(1 << 1) // Zero flag
-	flagIBit = uint8(1 << 2) // Interrupt Disable flag
-	flagDBit = uint8(1 << 3) // Decimal Mode flag
-	flagBBit = uint8(1 << 4) // Break Command flag
-	flagUBit = uint8(1 << 5) // Unused
-	flagVBit = uint8(1 << 6) // Overflow flag
-	flagNBit = uint8(1 << 7) // Negative flag
+	flagC = uint8(1 << iota) // Carry
+	flagZ                    // Zero
+	flagI                    // Interrupt Disable
+	flagD                    // Decimal Mode
+	flagB                    // Break Command
+	flagU                    // Unused
+	flagV                    // Overflow
+	flagN                    // Negative
 )
 
 type addrMode uint8
 
-func (a addrMode) String() string {
-	switch a {
-	case addrModeIMM:
-		return "IMM"
-	case addrModeZP:
-		return "ZP"
-	case addrModeZPX:
-		return "ZPX"
-	case addrModeZPY:
-		return "ZPY"
-	case addrModeABS:
-		return "ABS"
-	case addrModeABSX:
-		return "ABSX"
-	case addrModeABSY:
-		return "ABSY"
-	case addrModeIND:
-		return "IND"
-	case addrModeINDX:
-		return "INDX"
-	case addrModeINDY:
-		return "INDY"
-	case addrModeREL:
-		return "REL"
-	case addrModeACC:
-		return "ACC"
-	case addrModeIMP:
-		return "IMP"
-	default:
-		return "UNKNOWN"
-	}
-}
-
 const (
-	// Immediate
-	// Operand is a constant value.
-	// Example: LDA #$10 (Load Accumulator with 10)
-	addrModeIMM addrMode = iota + 1
-
-	// Zero Page
-	// Operand is located in the first 256 bytes of memory.
-	// Example: LDA $10 (Load Accumulator from address $0010)
-	addrModeZP
-
-	// Zero Page, X
-	// Operand address is in zero page plus the X register.
-	// Example: LDA $10,X (Load Accumulator from address $0010 + X)
-	addrModeZPX
-
-	// Zero Page, Y
-	// Operand address is in zero page plus the Y register.
-	// Example: LDX $10,Y (Load X Register from address $0010 + Y)
-	addrModeZPY
-
-	// Absolute
-	// Full 16-bit address.
-	// Example: LDA $1234 (Load Accumulator from address $1234)
-	addrModeABS
-
-	// Absolute, X
-	// Full 16-bit address plus the X register.
-	// Example: LDA $1234,X (Load Accumulator from address $1234 + X)
-	addrModeABSX
-
-	// Absolute, Y
-	// Full 16-bit address plus the Y register.
-	// Example: LDA $1234,Y (Load Accumulator from address $1234 + Y)
-	addrModeABSY
-
-	// Indirect
-	// Address is fetched from a pointer.
-	// Example: JMP ($1234) (Jump to address stored at $1234)
-	addrModeIND
-
-	// Indexed Indirect (X)
-	// Address is in zero page, indexed by X.
-	// Example: LDA ($10,X) (Load Accumulator from address stored at $0010 + X)
-	addrModeINDX
-
-	// Indirect Indexed (Y)
-	// Address is fetched from zero page pointer plus Y.
-	// Example: LDA ($10),Y (Load Accumulator from address stored at $0010 + Y)
-	addrModeINDY
-
-	// Relative
-	// Used for branching instructions.
-	// The operand is a signed 8-bit offset from the current instruction’s address.
-	// Example: BNE $10 (Branch if Not Equal, with an offset of $10)
-	addrModeREL
-
-	// Accumulator
-	// Operand is the accumulator.
-	// Example: LSR A (Logical Shift Right on Accumulator)
-	addrModeACC
-
-	// Implied
-	// Operand is implicit.
-	// Example: CLC (Clear Carry Flag)
-	addrModeIMP
+	addrModeIMM  addrMode = iota + 1 // Immediate
+	addrModeZP                       // Zero Page
+	addrModeZPX                      // Zero Page X
+	addrModeZPY                      // Zero Page Y
+	addrModeABS                      // Absolute
+	addrModeABSX                     // Absolute X
+	addrModeABSY                     // Absolute Y
+	addrModeIND                      // Indirect
+	addrModeINDX                     // Indirect X
+	addrModeINDY                     // Indirect Y
+	addrModeREL                      // Relative
+	addrModeACC                      // Accumulator
+	addrModeIMP                      // Implied
 )
 
-type opcodeFunc func()
-
-type instruction struct {
-	name   string
-	fn     opcodeFunc
+type instr struct {
 	mode   addrMode
+	fn     func()
 	cycles uint8
 }
 
 type CPU struct {
-	a            uint8              // used to perform arithmetic and logical operations
-	x            uint8              // used primarily for indexing and temporary storage
-	y            uint8              // used mainly for indexing and temporary storage
-	p            uint8              // contains flags from flagXBit
-	sp           uint8              // stack pointer
-	pc           uint16             // program counter
-	mem          ReadWriter         // bus to read and write data
-	instrs       [0x100]instruction // opcode -> instruction mapping
-	cycles       uint8              // number of cycles left for the current operation
-	addrMode     addrMode           // current address mode
-	operandAddr  uint16             // address of the operand
-	operandValue uint8              // value of the operand
-	pageCrossed  bool               // flag to indicate if the operation crosses a page boundary
+	a            uint8
+	x            uint8
+	y            uint8
+	p            uint8
+	sp           uint8
+	pc           uint16
+	mem          ReadWriter
+	instrs       [0x100]instr
+	cycles       uint8
+	totalCycles  uint64
+	addrMode     addrMode
+	operandAddr  uint16
+	operandValue uint8
+	pageCrossed  bool
+	halt         bool
+}
+
+func isSameSign(a, b uint8) bool {
+	return (a^b)&0x80 == 0
+}
+
+func isDiffPage(a, b uint16) bool {
+	return a&0xff00 != b&0xff00
 }
 
 func NewCPU(mem ReadWriter) *CPU {
@@ -168,11 +89,6 @@ func (c *CPU) write8(addr uint16, data uint8) {
 	c.mem.Write8(addr, data)
 }
 
-func (c *CPU) write16(addr uint16, data uint16) {
-	c.write8(addr, uint8(data))
-	c.write8(addr+1, uint8(data>>8))
-}
-
 func (c CPU) getFlag(flag uint8) bool {
 	return c.p&flag > 0
 }
@@ -186,13 +102,13 @@ func (c *CPU) setFlag(flag uint8, v bool) {
 }
 
 func (c *CPU) setFlagsZN(value uint8) {
-	c.setFlag(flagZBit, value == 0)
-	c.setFlag(flagNBit, value&0x80 > 0)
+	c.setFlag(flagZ, value == 0)
+	c.setFlag(flagN, value&flagN > 0)
 }
 
 func (c *CPU) stackPop8() uint8 {
 	c.sp++
-	return c.read8(stackStartAddr + uint16(c.sp))
+	return c.read8(stackStartAddr | uint16(c.sp))
 }
 
 func (c *CPU) stackPop16() uint16 {
@@ -202,7 +118,7 @@ func (c *CPU) stackPop16() uint16 {
 }
 
 func (c *CPU) stackPush8(data uint8) {
-	c.write8(stackStartAddr+uint16(c.sp), data)
+	c.write8(stackStartAddr|uint16(c.sp), data)
 	c.sp--
 }
 
@@ -213,60 +129,76 @@ func (c *CPU) stackPush16(data uint16) {
 	c.stackPush8(lo)
 }
 
-func (c *CPU) Tic() {
-	if c.cycles != 0 {
-		c.cycles--
-		return
-	}
-
-	opcode := c.read8(c.pc)
-	c.pc++
-	instr := c.instrs[opcode]
-	c.fetch(instr.mode)
-	instr.fn()
-	c.cycles += instr.cycles
-
-	c.addrMode = 0
-	c.operandAddr = 0
-	c.operandValue = 0
-	c.pageCrossed = false
-}
-
 // Reset the CPU to its initial state
 func (c *CPU) Reset() {
+	c.halt = false
 	c.a = 0
 	c.x = 0
 	c.y = 0
-	c.p = 0x00 | flagUBit
+	c.p = 0x00 | flagU | flagI
 	c.sp = 0xfd
 	c.pc = c.read16(0xfffc)
+	c.pc = 0xc000 // start from the beginning of the PRG ROM
 	c.cycles = 8
+	c.totalCycles = 7
 }
 
-// interrupt request signal
+// Interrupt request signal
 func (c *CPU) IRQ() {
-	if c.getFlag(flagIBit) {
+	if c.getFlag(flagI) {
 		return
 	}
 
 	c.stackPush16(c.pc)
-	c.setFlag(flagBBit, false)
-	c.setFlag(flagUBit, true)
-	c.setFlag(flagIBit, true)
+	c.setFlag(flagB, false)
+	c.setFlag(flagU, true)
+	c.setFlag(flagI, true)
 	c.stackPush8(c.p)
 	c.pc = c.read16(0xfffe)
 	c.cycles = 7
 }
 
-// non-maskable interrupt request signal
+// Non-maskable interrupt request signal
 func (c *CPU) NMI() {
 	c.stackPush16(c.pc)
-	c.setFlag(flagBBit, false)
-	c.setFlag(flagUBit, true)
-	c.setFlag(flagIBit, true)
+	c.setFlag(flagB, false)
+	c.setFlag(flagU, true)
+	c.setFlag(flagI, true)
 	c.stackPush8(c.p)
 	c.pc = c.read16(0xfffa)
 	c.cycles = 8
+}
+
+// Tic executes one CPU cycle and
+// returns the number of cycles left for the current operation
+func (c *CPU) Tic() uint8 {
+	if c.halt {
+		return 0
+	}
+
+	if c.cycles != 0 {
+		c.cycles--
+		return c.cycles
+	}
+
+	opcode := c.read8(c.pc)
+	c.pc++
+	instr := c.instrs[opcode]
+	if instr.fn == nil {
+		c.hlt()
+		log.Printf("unsupported opcode %02X. PC: %04X. halting...\n", opcode, c.pc)
+		return 0
+	}
+	c.fetch(instr.mode)
+	instr.fn()
+	c.cycles += instr.cycles
+	c.totalCycles += uint64(c.cycles)
+
+	c.addrMode = 0
+	c.operandAddr = 0
+	c.operandValue = 0
+	c.pageCrossed = false
+	return c.cycles
 }
 
 func (c *CPU) fetch(addrMode addrMode) {
@@ -311,7 +243,7 @@ func (c *CPU) fetch(addrMode addrMode) {
 		c.pc += 2
 		c.operandAddr = baseAddr + uint16(c.x)
 		c.operandValue = c.read8(c.operandAddr)
-		c.pageCrossed = (baseAddr & 0xff00) != (c.operandAddr & 0xff00)
+		c.pageCrossed = isDiffPage(baseAddr, c.operandAddr)
 		return
 
 	case addrModeABSY:
@@ -319,16 +251,18 @@ func (c *CPU) fetch(addrMode addrMode) {
 		c.pc += 2
 		c.operandAddr = baseAddr + uint16(c.y)
 		c.operandValue = c.read8(c.operandAddr)
-		c.pageCrossed = (baseAddr & 0xff00) != (c.operandAddr & 0xff00)
+		c.pageCrossed = isDiffPage(baseAddr, c.operandAddr)
 		return
 
 	case addrModeIND:
 		addr := c.read16(c.pc)
 		c.pc += 2
-		// simulate 6502 page boundary hardware bug
-		// if low byte is 0x00FF, then high byte is 0x0000
+
 		lo := addr
-		hi := (lo & 0xff00) | (lo&0x00ff + 1)
+		hi := addr + 1
+		if lo&0xff == 0xff { // simulate 6502 bug
+			hi = (lo & 0xff00) | uint16((lo+1)&0x00ff)
+		}
 		c.operandAddr = uint16(c.read8(lo)) | uint16(c.read8(hi))<<8
 		c.operandValue = c.read8(c.operandAddr)
 		return
@@ -347,16 +281,17 @@ func (c *CPU) fetch(addrMode addrMode) {
 		c.pc++
 		lo := uint16(c.read8(addr))
 		hi := uint16(c.read8((addr + 1) & 0x00ff))
-		c.operandAddr = (lo | hi<<8) + uint16(c.y)
+		addr = lo | hi<<8
+		c.operandAddr = addr + uint16(c.y)
 		c.operandValue = c.read8(c.operandAddr)
-		c.pageCrossed = (lo & 0xff00) != (hi & 0xff00)
+		c.pageCrossed = isDiffPage(addr, c.operandAddr)
 		return
 
 	case addrModeREL:
 		c.operandAddr = uint16(c.read8(c.pc))
 		c.pc++
 		if c.operandAddr&0x80 > 0 {
-			c.operandAddr |= 0xFF00 // add leading 1 bits to save the sign
+			c.operandAddr |= 0xFF00 // add leading 1 s to save the sign
 		}
 		return
 
@@ -366,44 +301,27 @@ func (c *CPU) fetch(addrMode addrMode) {
 
 	case addrModeIMP:
 		return
-
 	}
 
-	log.Fatalln("unreachable. addr mode must be always valid")
+	c.hlt()
+	log.Printf("unsupported addressing mode %d. PC: %04X. halting...\n", addrMode, c.pc)
 }
 
-// returns true if the two values have the same sign, false otherwise
-func isSameSign(a, b uint8) bool {
-	return (a^b)&0x80 == 0
-}
-
-// Add with Carry
-// A = A + M + C
-//
-// Flags Affected: C, Z, N, V
-//
-// An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) adc() {
 	r16 := uint16(c.a) + uint16(c.operandValue)
-	if c.getFlag(flagCBit) {
+	if c.getFlag(flagC) {
 		r16++
 	}
 	r8 := uint8(r16)
-	c.setFlag(flagCBit, r16 > 0xff)
+	c.setFlag(flagC, r16 > 0xff)
 	c.setFlagsZN(r8)
-	c.setFlag(flagVBit, isSameSign(c.a, c.operandValue) && !isSameSign(c.a, r8))
+	c.setFlag(flagV, isSameSign(c.a, c.operandValue) && !isSameSign(c.a, r8))
+	c.a = r8
 	if c.pageCrossed {
 		c.cycles++
 	}
-	c.a = r8
 }
 
-// Logical AND
-// A = A & M
-//
-// Flags affected: Z, N
-//
-// An additional cycle is needed if the page boundary is crossed
 func (c *CPU) and() {
 	c.a &= c.operandValue
 	c.setFlagsZN(c.a)
@@ -412,12 +330,8 @@ func (c *CPU) and() {
 	}
 }
 
-// Arithmetic Shift Left
-// C <- (A or M)7, (A or M) << 1
-//
-// Flags affected: C, Z, N
 func (c *CPU) asl() {
-	c.setFlag(flagCBit, c.operandValue&0x80 > 0)
+	c.setFlag(flagC, c.operandValue&0x80 > 0)
 	r8 := c.operandValue << 1
 	c.setFlagsZN(r8)
 	if c.addrMode == addrModeACC {
@@ -427,242 +341,115 @@ func (c *CPU) asl() {
 	}
 }
 
-// common branch instruction
 func (c *CPU) jmpIf(condition bool) {
 	if !condition {
 		return
 	}
 	c.cycles++
 	addr := c.pc + c.operandAddr
-	if addr&0xff00 != c.pc&0xff00 {
-		c.cycles++ // different pages
+	if isDiffPage(c.pc, addr) {
+		c.cycles++
 	}
 	c.pc = addr
 }
 
-// Branch if Carry Clear
-// If C = 0, PC <- PC + offset
-//
-// Flags affected: None
-//
-// An additional cycles:
-//
-//	If the branch occurs on the same page (1 cycle)
-//	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bcc() {
-	c.jmpIf(!c.getFlag(flagCBit))
+	c.jmpIf(!c.getFlag(flagC))
 }
 
-// Branch if Carry Set
-// If C = 1, PC <- PC + offset
-//
-// Flags affected: None
-//
-// An additional cycles:
-//
-//	If the branch occurs on the same page (1 cycle)
-//	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bcs() {
-	c.jmpIf(c.getFlag(flagCBit))
+	c.jmpIf(c.getFlag(flagC))
 }
 
-// Branch if Equal
-// If Z = 1, PC <- PC + offset
-//
-// Flags affected: None
-//
-// An additional cycles:
-//
-//	If the branch occurs on the same page (1 cycle)
-//	If the branch occurs on a different page (2 cycles)
 func (c *CPU) beq() {
-	c.jmpIf(c.getFlag(flagZBit))
+	c.jmpIf(c.getFlag(flagZ))
 }
 
-// Bit Test
-// A & M, N <- M7, V <- M6
-//
-// Flags affected: Z, N, V
 func (c *CPU) bit() {
 	m := c.a & c.operandValue
-	c.setFlagsZN(m)
-	c.setFlag(flagVBit, m&flagVBit > 0)
+	c.setFlag(flagZ, m == 0)
+	c.setFlag(flagN, c.operandValue&flagN > 0)
+	c.setFlag(flagV, c.operandValue&flagV > 0)
 }
 
-// Branch if Minus
-// If N = 1, PC <- PC + offset
-//
-// Flags affected: None
-//
-// An additional cycles:
-//
-//	If the branch occurs on the same page (1 cycle)
-//	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bmi() {
-	c.jmpIf(c.getFlag(flagNBit))
+	c.jmpIf(c.getFlag(flagN))
 }
 
-// Branch if Not Equal
-// If Z = 0, PC <- PC + offset
-//
-// Flags affected: None
-//
-// An additional cycles:
-//
-//	If the branch occurs on the same page (1 cycle)
-//	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bne() {
-	c.jmpIf(!c.getFlag(flagZBit))
+	c.jmpIf(!c.getFlag(flagZ))
 }
 
-// Branch if Positive
-// If N = 0, PC <- PC + offset
-//
-// Flags affected: None
-//
-// An additional cycles:
-//
-//	If the branch occurs on the same page (1 cycle)
-//	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bpl() {
-	c.jmpIf(!c.getFlag(flagNBit))
+	c.jmpIf(!c.getFlag(flagN))
 }
 
-// Force Interrupt
-//
-// Flags affected: B, U
 func (c *CPU) brk() {
 	c.pc++
 	c.stackPush16(c.pc)
-	c.stackPush8(c.p | flagBBit)
-	c.setFlag(flagIBit, true)
+	c.stackPush8(c.p | flagB)
+	c.setFlag(flagI, true)
 	c.pc = c.read16(0xfffe)
 }
 
-// Branch if Overflow Clear
-// If V = 0, PC <- PC + offset
-//
-// Flags affected: None
-//
-// An additional cycles:
-//
-//	If the branch occurs on the same page (1 cycle)
-//	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bvc() {
-	c.jmpIf(!c.getFlag(flagVBit))
+	c.jmpIf(!c.getFlag(flagV))
 }
 
-// Branch if Overflow Set
-// If V = 1, PC <- PC + offset
-//
-// Flags affected: None
-//
-// An additional cycles:
-//
-//	If the branch occurs on the same page (1 cycle)
-//	If the branch occurs on a different page (2 cycles)
 func (c *CPU) bvs() {
-	c.jmpIf(c.getFlag(flagVBit))
+	c.jmpIf(c.getFlag(flagV))
 }
 
-// Clear Carry Flag
-// C <- 0
-//
-// Flags affected: C
 func (c *CPU) clc() {
-	c.setFlag(flagCBit, false)
+	c.setFlag(flagC, false)
 }
 
-// Clear Decimal Mode
-// D <- 0
-//
-// Flags affected: D
 func (c *CPU) cld() {
-	c.setFlag(flagDBit, false)
+	c.setFlag(flagD, false)
 }
 
-// Clear Interrupt Disable
-// I <- 0
-//
-// Flags affected: I
 func (c *CPU) cli() {
-	c.setFlag(flagIBit, false)
+	c.setFlag(flagI, false)
 }
 
-// Clear Overflow Flag
-// V <- 0
-//
-// Flags affected: V
 func (c *CPU) clv() {
-	c.setFlag(flagVBit, false)
+	c.setFlag(flagV, false)
 }
 
-// Compare
-// A - M
-//
-// Flags affected: C, Z, N
-//
-// An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) cmp() {
-	c.setFlag(flagCBit, c.a >= c.operandValue)
+	c.setFlag(flagC, c.a >= c.operandValue)
 	c.setFlagsZN(c.a - c.operandValue)
 	if c.pageCrossed {
 		c.cycles++
 	}
 }
 
-// Compare X Register
-// X - M
-//
-// Flags affected: C, Z, N
 func (c *CPU) cpx() {
-	c.setFlag(flagCBit, c.x >= c.operandValue)
+	c.setFlag(flagC, c.x >= c.operandValue)
 	c.setFlagsZN(c.x - c.operandValue)
 }
 
-// Compare Y Register
-// Y - M
-//
-// Flags affected: C, Z, N
 func (c *CPU) cpy() {
-	c.setFlag(flagCBit, c.y >= c.operandValue)
+	c.setFlag(flagC, c.y >= c.operandValue)
 	c.setFlagsZN(c.y - c.operandValue)
 }
 
-// Decrement Memory
-// M - 1
-//
-// Flags affected: Z, N
 func (c *CPU) dec() {
 	r := c.operandValue - 1
 	c.setFlagsZN(r)
 	c.write8(c.operandAddr, r)
 }
 
-// Decrement X Register
-// X - 1
-//
-// Flags affected: Z, N
 func (c *CPU) dex() {
 	c.x--
 	c.setFlagsZN(c.x)
 }
 
-// Decrement Y Register
-// Y - 1
-//
-// Flags affected: Z, N
 func (c *CPU) dey() {
 	c.y--
 	c.setFlagsZN(c.y)
 }
 
-// Exclusive OR
-// A ^ M
-//
-// Flags affected: Z, N
-//
-// An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) eor() {
 	c.a ^= c.operandValue
 	c.setFlagsZN(c.a)
@@ -671,58 +458,34 @@ func (c *CPU) eor() {
 	}
 }
 
-// Increment Memory
-// M + 1
-//
-// Flags affected: Z, N
 func (c *CPU) inc() {
 	r := c.operandValue + 1
 	c.setFlagsZN(r)
 	c.write8(c.operandAddr, r)
 }
 
-// Increment X Register
-// X + 1
-//
-// Flags affected: Z, N
 func (c *CPU) inx() {
 	c.x++
 	c.setFlagsZN(c.x)
 }
 
-// Increment Y Register
-// Y + 1
-//
-// Flags affected: Z, N
 func (c *CPU) iny() {
 	c.y++
 	c.setFlagsZN(c.y)
 }
 
-// Jump
-// PC <- address
-//
-// Flags affected: None
 func (c *CPU) jmp() {
 	c.pc = c.operandAddr
 }
 
-// Jump to Subroutine
-// PC <- address
-//
-// Flags affected: None
 func (c *CPU) jsr() {
-	c.pc-- // pc incremented by 1 after the fetch, so we need to decrement it
+	// pc incremented by 1 after the fetch,
+	// so we need to decrement it
+	c.pc--
 	c.stackPush16(c.pc)
 	c.pc = c.operandAddr
 }
 
-// Load Accumulator
-// A <- M
-//
-// Flags affected: Z, N
-//
-// An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) lda() {
 	c.a = c.operandValue
 	c.setFlagsZN(c.a)
@@ -731,12 +494,6 @@ func (c *CPU) lda() {
 	}
 }
 
-// Load X Register
-// X <- M
-//
-// Flags affected: Z, N
-//
-// An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) ldx() {
 	c.x = c.operandValue
 	c.setFlagsZN(c.x)
@@ -745,12 +502,6 @@ func (c *CPU) ldx() {
 	}
 }
 
-// Load Y Register
-// Y <- M
-//
-// Flags affected: Z, N
-//
-// An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) ldy() {
 	c.y = c.operandValue
 	c.setFlagsZN(c.y)
@@ -759,15 +510,10 @@ func (c *CPU) ldy() {
 	}
 }
 
-// Logical Shift Right
-// C <- (A or M)0, (A or M) >> 1
-//
-// Flags affected: C, Z, N
 func (c *CPU) lsr() {
-	c.setFlag(flagCBit, c.operandValue&0x1 > 0)
+	c.setFlag(flagC, c.operandValue&0x1 > 0)
 	r := c.operandValue >> 1
-	c.setFlag(flagZBit, r == 0)
-	c.setFlag(flagNBit, r&0x80 > 0)
+	c.setFlagsZN(r)
 	if c.addrMode == addrModeACC {
 		c.a = r
 	} else {
@@ -775,73 +521,45 @@ func (c *CPU) lsr() {
 	}
 }
 
-// No Operation
-// No operation is performed
-//
-// Flags affected: None
 func (c *CPU) nop() {
-}
-
-// Logical Inclusive OR
-// A | M
-//
-// Flags affected: Z, N
-//
-// An additional cycle is needed if the page boundary is crossed.
-func (c *CPU) ora() {
-	c.a |= c.operandValue
-	c.setFlag(flagZBit, c.a == 0)
-	c.setFlag(flagNBit, c.a&0x80 > 0)
+	// it needs for illegal opcodes
 	if c.pageCrossed {
 		c.cycles++
 	}
 }
 
-// Push Accumulator
-// A -> stack
-//
-// Flags affected: None
+func (c *CPU) ora() {
+	c.a |= c.operandValue
+	c.setFlagsZN(c.a)
+	if c.pageCrossed {
+		c.cycles++
+	}
+}
+
 func (c *CPU) pha() {
 	c.stackPush8(c.a)
 }
 
-// Push Processor p
-// p -> stack
 func (c *CPU) php() {
-	c.stackPush8(c.p)
+	c.stackPush8(c.p | flagB)
 }
 
-// Pull Accumulator
-// A <- stack
-//
-// Flags affected: Z, N
 func (c *CPU) pla() {
 	c.a = c.stackPop8()
-	c.setFlag(flagZBit, c.a == 0)
-	c.setFlag(flagNBit, c.a&0x80 > 0)
+	c.setFlagsZN(c.a)
 }
 
-// Pull Processor p
-// p <- stack
-//
-// Flags affected: All
 func (c *CPU) plp() {
-	c.p = c.stackPop8()
+	c.p = (c.stackPop8() | flagU) & ^flagB
 }
 
-// Rotate Left
-// C <- (A or M)7, (A or M) << 1
-//
-// Flags affected: C, Z, N
 func (c *CPU) rol() {
-	carry := c.operandValue&0x80 > 0
 	r := c.operandValue << 1
-	if c.getFlag(flagCBit) {
+	if c.getFlag(flagC) {
 		r |= 0x1
 	}
-	c.setFlag(flagCBit, carry)
-	c.setFlag(flagZBit, r == 0)
-	c.setFlag(flagNBit, r&0x80 > 0)
+	c.setFlag(flagC, c.operandValue&0x80 > 0)
+	c.setFlagsZN(r)
 	if c.addrMode == addrModeACC {
 		c.a = r
 	} else {
@@ -849,19 +567,13 @@ func (c *CPU) rol() {
 	}
 }
 
-// Rotate Right
-// C -> (A or M)0, (A or M) >> 1
-//
-// Flags affected: C, Z, N
 func (c *CPU) ror() {
-	carry := c.operandValue&0x1 > 0
 	r := c.operandValue >> 1
-	if c.getFlag(flagCBit) {
+	if c.getFlag(flagC) {
 		r |= 0x80
 	}
-	c.setFlag(flagCBit, carry)
-	c.setFlag(flagZBit, r == 0)
-	c.setFlag(flagNBit, r&0x80 > 0)
+	c.setFlag(flagC, c.operandValue&0x1 > 0)
+	c.setFlagsZN(r)
 	if c.addrMode == addrModeACC {
 		c.a = r
 	} else {
@@ -869,304 +581,423 @@ func (c *CPU) ror() {
 	}
 }
 
-// Return from Interrupt
-// p <- stack, PC <- stack
-//
-// Flags affected: All
 func (c *CPU) rti() {
-	c.p = c.stackPop8()
-	c.p &= ^flagBBit
-	c.p &= ^flagUBit
+	c.p = (c.stackPop8() | flagU) & ^flagB
 	c.pc = c.stackPop16()
 }
 
-// Return from Subroutine
-// PC <- stack
-//
-// Flags affected: None
 func (c *CPU) rts() {
 	c.pc = c.stackPop16()
-	c.pc++ // increment to the next instruction
+	c.pc++
 }
 
-// Subtract with Carry
-// A = A - M - (1 - C)
-//
-// Flags affected: C, Z, N, V
-//
-// An additional cycle is needed if the page boundary is crossed.
 func (c *CPU) sbc() {
-	r16 := uint16(c.a) + uint16(^c.operandValue)
-	if c.getFlag(flagCBit) {
-		r16++
-	}
-	r8 := uint8(r16)
-	c.setFlag(flagCBit, r16 > 0xff)
-	c.setFlag(flagZBit, r8 == 0)
-	c.setFlag(flagNBit, r8&0x80 > 0)
-	c.setFlag(flagVBit, (r8^c.a)&(r8^c.operandValue)&0x80 > 0)
-	c.a = r8
+	c.operandValue = ^c.operandValue
+	c.adc()
+}
+
+func (c *CPU) sec() {
+	c.setFlag(flagC, true)
+}
+
+func (c *CPU) sed() {
+	c.setFlag(flagD, true)
+}
+
+func (c *CPU) sei() {
+	c.setFlag(flagI, true)
+}
+
+func (c *CPU) sta() {
+	c.write8(c.operandAddr, c.a)
+}
+
+func (c *CPU) stx() {
+	c.write8(c.operandAddr, c.x)
+}
+
+func (c *CPU) sty() {
+	c.write8(c.operandAddr, c.y)
+}
+
+func (c *CPU) tax() {
+	c.x = c.a
+	c.setFlagsZN(c.x)
+}
+
+func (c *CPU) tay() {
+	c.y = c.a
+	c.setFlagsZN(c.y)
+}
+
+func (c *CPU) tsx() {
+	c.x = c.sp
+	c.setFlagsZN(c.x)
+}
+
+func (c *CPU) txa() {
+	c.a = c.x
+	c.setFlagsZN(c.a)
+}
+
+func (c *CPU) txs() {
+	c.sp = c.x
+}
+
+func (c *CPU) tya() {
+	c.a = c.y
+	c.setFlagsZN(c.a)
+}
+
+func (c *CPU) lax() {
+	c.a = c.operandValue
+	c.x = c.operandValue
+	c.setFlagsZN(c.a)
 	if c.pageCrossed {
 		c.cycles++
 	}
 }
 
-// Set Carry Flag
-// C <- 1
-//
-// Flags affected: C
-func (c *CPU) sec() {
-	c.setFlag(flagCBit, true)
+func (c *CPU) sax() {
+	c.write8(c.operandAddr, c.a&c.x)
 }
 
-// Set Decimal Flag
-// D <- 1
-//
-// Flags affected: D
-func (c *CPU) sed() {
-	c.setFlag(flagDBit, true)
+func (c *CPU) dcp() {
+	c.operandValue--
+	c.write8(c.operandAddr, c.operandValue)
+	c.pageCrossed = false
+	c.cmp()
 }
 
-// Set Interrupt Disable
-// I <- 1
-//
-// Flags affected: I
-func (c *CPU) sei() {
-	c.setFlag(flagIBit, true)
+func (c *CPU) isc() {
+	c.operandValue++
+	c.write8(c.operandAddr, c.operandValue)
+	c.pageCrossed = false
+	c.sbc()
 }
 
-// Store Accumulator
-// M <- A
-//
-// Flags affected: None
-func (c *CPU) sta() {
-	c.write8(c.operandAddr, c.a)
+func (c *CPU) slo() {
+	c.setFlag(flagC, c.operandValue&0x80 > 0)
+	r := c.operandValue << 1
+	c.write8(c.operandAddr, r)
+	c.a |= r
+	c.setFlagsZN(c.a)
 }
 
-// Store X Register
-// M <- X
-//
-// Flags affected: None
-func (c *CPU) stx() {
-	c.write8(c.operandAddr, c.x)
+func (c *CPU) rla() {
+	carry := c.operandValue&0x80 > 0
+	r := c.operandValue << 1
+	if c.getFlag(flagC) {
+		r |= 0x1
+	}
+	c.write8(c.operandAddr, r)
+	c.a &= r
+	c.setFlag(flagC, carry)
+	c.setFlagsZN(c.a)
 }
 
-// Store Y Register
-// M <- Y
-//
-// Flags affected: None
-func (c *CPU) sty() {
-	c.write8(c.operandAddr, c.y)
+func (c *CPU) sre() {
+	c.setFlag(flagC, c.operandValue&0x1 > 0)
+	r := c.operandValue >> 1
+	c.write8(c.operandAddr, r)
+	c.a ^= r
+	c.setFlagsZN(c.a)
 }
 
-// Transfer Accumulator to X
-// X <- A
-//
-// Flags affected: Z, N
-func (c *CPU) tax() {
-	c.x = c.a
-	c.setFlag(flagZBit, c.x == 0)
-	c.setFlag(flagNBit, c.x&0x80 > 0)
+func (c *CPU) rra() {
+	r := c.operandValue >> 1
+	if c.getFlag(flagC) {
+		r |= 0x80
+	}
+	c.setFlag(flagC, c.operandValue&0x1 > 0)
+	c.operandValue = r
+	c.write8(c.operandAddr, c.operandValue)
+	c.pageCrossed = false
+	c.adc()
 }
 
-// Transfer Accumulator to Y
-// Y <- A
-//
-// Flags affected: Z, N
-func (c *CPU) tay() {
-	c.y = c.a
-	c.setFlag(flagZBit, c.y == 0)
-	c.setFlag(flagNBit, c.y&0x80 > 0)
+func (c *CPU) hlt() {
+	c.pc--
+	c.halt = true
 }
 
-// Transfer Stack Pointer to X
-// X <- SP
-//
-// Flags affected: Z, N
-func (c *CPU) tsx() {
-	c.x = c.sp
-	c.setFlag(flagZBit, c.x == 0)
-	c.setFlag(flagNBit, c.x&0x80 > 0)
+func (c *CPU) anc() {
+	c.a &= c.operandValue
+	c.setFlag(flagC, c.a&0x80 > 0)
+	c.setFlagsZN(c.a)
 }
 
-// Transfer X to Accumulator
-// A <- X
-//
-// Flags affected: Z, N
-func (c *CPU) txa() {
-	c.a = c.x
-	c.setFlag(flagZBit, c.a == 0)
-	c.setFlag(flagNBit, c.a&0x80 > 0)
+func (c *CPU) alr() {
+	c.a &= c.operandValue
+	c.setFlag(flagC, c.a&0x1 > 0)
+	c.a >>= 1
+	c.setFlagsZN(c.a)
 }
 
-// Transfer X to Stack Pointer
-// SP <- X
-//
-// Flags affected: None
-func (c *CPU) txs() {
-	c.sp = c.x
+func (c *CPU) las() {
+	r := c.operandValue & c.sp
+	c.a = r
+	c.x = r
+	c.sp = r
+	c.setFlagsZN(r)
+	if c.pageCrossed {
+		c.cycles++
+	}
 }
 
-// Transfer Y to Accumulator
-// A <- Y
-//
-// Flags affected: Z, N
-func (c *CPU) tya() {
-	c.a = c.y
-	c.setFlag(flagZBit, c.a == 0)
-	c.setFlag(flagNBit, c.a&0x80 > 0)
+func (c *CPU) axs() {
+	c.x = c.a&c.x - c.operandValue
+	c.setFlag(flagC, c.x >= c.operandValue)
+	c.setFlagsZN(c.x - c.operandValue)
 }
 
 func (c *CPU) initInstructions() {
-	c.instrs[0x00] = instruction{name: "BRK", mode: addrModeIMP, cycles: 7, fn: c.brk}
-	c.instrs[0x01] = instruction{name: "ORA", mode: addrModeINDX, cycles: 6, fn: c.ora}
-	c.instrs[0x05] = instruction{name: "ORA", mode: addrModeZP, cycles: 3, fn: c.ora}
-	c.instrs[0x06] = instruction{name: "ASL", mode: addrModeZP, cycles: 5, fn: c.asl}
-	c.instrs[0x08] = instruction{name: "PHP", mode: addrModeIMP, cycles: 3, fn: c.php}
-	c.instrs[0x09] = instruction{name: "ORA", mode: addrModeIMM, cycles: 2, fn: c.ora}
-	c.instrs[0x0A] = instruction{name: "ASL", mode: addrModeACC, cycles: 2, fn: c.asl}
-	c.instrs[0x0D] = instruction{name: "ORA", mode: addrModeABS, cycles: 4, fn: c.ora}
-	c.instrs[0x0E] = instruction{name: "ASL", mode: addrModeABS, cycles: 6, fn: c.asl}
-	c.instrs[0x10] = instruction{name: "BPL", mode: addrModeREL, cycles: 2, fn: c.bpl}
-	c.instrs[0x11] = instruction{name: "ORA", mode: addrModeINDY, cycles: 5, fn: c.ora}
-	c.instrs[0x15] = instruction{name: "ORA", mode: addrModeZPX, cycles: 4, fn: c.ora}
-	c.instrs[0x16] = instruction{name: "ASL", mode: addrModeZPX, cycles: 6, fn: c.asl}
-	c.instrs[0x18] = instruction{name: "CLC", mode: addrModeIMP, cycles: 2, fn: c.clc}
-	c.instrs[0x19] = instruction{name: "ORA", mode: addrModeABSY, cycles: 4, fn: c.ora}
-	c.instrs[0x1D] = instruction{name: "ORA", mode: addrModeABSX, cycles: 4, fn: c.ora}
-	c.instrs[0x1E] = instruction{name: "ASL", mode: addrModeABSX, cycles: 7, fn: c.asl}
-	c.instrs[0x20] = instruction{name: "JSR", mode: addrModeABS, cycles: 6, fn: c.jsr}
-	c.instrs[0x21] = instruction{name: "AND", mode: addrModeINDX, cycles: 6, fn: c.and}
-	c.instrs[0x24] = instruction{name: "BIT", mode: addrModeZP, cycles: 3, fn: c.bit}
-	c.instrs[0x25] = instruction{name: "AND", mode: addrModeZP, cycles: 3, fn: c.and}
-	c.instrs[0x26] = instruction{name: "ROL", mode: addrModeZP, cycles: 5, fn: c.rol}
-	c.instrs[0x28] = instruction{name: "PLP", mode: addrModeIMP, cycles: 4, fn: c.plp}
-	c.instrs[0x29] = instruction{name: "AND", mode: addrModeIMM, cycles: 2, fn: c.and}
-	c.instrs[0x2A] = instruction{name: "ROL", mode: addrModeACC, cycles: 2, fn: c.rol}
-	c.instrs[0x2C] = instruction{name: "BIT", mode: addrModeABS, cycles: 4, fn: c.bit}
-	c.instrs[0x2D] = instruction{name: "AND", mode: addrModeABS, cycles: 4, fn: c.and}
-	c.instrs[0x2E] = instruction{name: "ROL", mode: addrModeABS, cycles: 6, fn: c.rol}
-	c.instrs[0x30] = instruction{name: "BMI", mode: addrModeREL, cycles: 2, fn: c.bmi}
-	c.instrs[0x31] = instruction{name: "AND", mode: addrModeINDY, cycles: 5, fn: c.and}
-	c.instrs[0x35] = instruction{name: "AND", mode: addrModeZPX, cycles: 4, fn: c.and}
-	c.instrs[0x36] = instruction{name: "ROL", mode: addrModeZPX, cycles: 6, fn: c.rol}
-	c.instrs[0x38] = instruction{name: "SEC", mode: addrModeIMP, cycles: 2, fn: c.sec}
-	c.instrs[0x39] = instruction{name: "AND", mode: addrModeABSY, cycles: 4, fn: c.and}
-	c.instrs[0x3D] = instruction{name: "AND", mode: addrModeABSX, cycles: 4, fn: c.and}
-	c.instrs[0x3E] = instruction{name: "ROL", mode: addrModeABSX, cycles: 7, fn: c.rol}
-	c.instrs[0x40] = instruction{name: "RTI", mode: addrModeIMP, cycles: 6, fn: c.rti}
-	c.instrs[0x41] = instruction{name: "EOR", mode: addrModeINDX, cycles: 6, fn: c.eor}
-	c.instrs[0x45] = instruction{name: "EOR", mode: addrModeZP, cycles: 3, fn: c.eor}
-	c.instrs[0x46] = instruction{name: "LSR", mode: addrModeZP, cycles: 5, fn: c.lsr}
-	c.instrs[0x48] = instruction{name: "PHA", mode: addrModeIMP, cycles: 3, fn: c.pha}
-	c.instrs[0x49] = instruction{name: "EOR", mode: addrModeIMM, cycles: 2, fn: c.eor}
-	c.instrs[0x4A] = instruction{name: "LSR", mode: addrModeACC, cycles: 2, fn: c.lsr}
-	c.instrs[0x4C] = instruction{name: "JMP", mode: addrModeABS, cycles: 3, fn: c.jmp}
-	c.instrs[0x4D] = instruction{name: "EOR", mode: addrModeABS, cycles: 4, fn: c.eor}
-	c.instrs[0x4E] = instruction{name: "LSR", mode: addrModeABS, cycles: 6, fn: c.lsr}
-	c.instrs[0x50] = instruction{name: "BVC", mode: addrModeREL, cycles: 2, fn: c.bvc}
-	c.instrs[0x51] = instruction{name: "EOR", mode: addrModeINDY, cycles: 5, fn: c.eor}
-	c.instrs[0x55] = instruction{name: "EOR", mode: addrModeZPX, cycles: 4, fn: c.eor}
-	c.instrs[0x56] = instruction{name: "LSR", mode: addrModeZPX, cycles: 6, fn: c.lsr}
-	c.instrs[0x58] = instruction{name: "CLI", mode: addrModeIMP, cycles: 2, fn: c.cli}
-	c.instrs[0x59] = instruction{name: "EOR", mode: addrModeABSY, cycles: 4, fn: c.eor}
-	c.instrs[0x5D] = instruction{name: "EOR", mode: addrModeABSX, cycles: 4, fn: c.eor}
-	c.instrs[0x5E] = instruction{name: "LSR", mode: addrModeABSX, cycles: 7, fn: c.lsr}
-	c.instrs[0x60] = instruction{name: "RTS", mode: addrModeIMP, cycles: 6, fn: c.rts}
-	c.instrs[0x61] = instruction{name: "ADC", mode: addrModeINDX, cycles: 6, fn: c.adc}
-	c.instrs[0x65] = instruction{name: "ADC", mode: addrModeZP, cycles: 3, fn: c.adc}
-	c.instrs[0x66] = instruction{name: "ROR", mode: addrModeZP, cycles: 5, fn: c.ror}
-	c.instrs[0x68] = instruction{name: "PLA", mode: addrModeIMP, cycles: 4, fn: c.pla}
-	c.instrs[0x69] = instruction{name: "ADC", mode: addrModeIMM, cycles: 2, fn: c.adc}
-	c.instrs[0x6A] = instruction{name: "ROR", mode: addrModeACC, cycles: 2, fn: c.ror}
-	c.instrs[0x6C] = instruction{name: "JMP", mode: addrModeIND, cycles: 5, fn: c.jmp}
-	c.instrs[0x6D] = instruction{name: "ADC", mode: addrModeABS, cycles: 4, fn: c.adc}
-	c.instrs[0x6E] = instruction{name: "ROR", mode: addrModeABS, cycles: 6, fn: c.ror}
-	c.instrs[0x70] = instruction{name: "BVS", mode: addrModeREL, cycles: 2, fn: c.bvs}
-	c.instrs[0x71] = instruction{name: "ADC", mode: addrModeINDY, cycles: 5, fn: c.adc}
-	c.instrs[0x75] = instruction{name: "ADC", mode: addrModeZPX, cycles: 4, fn: c.adc}
-	c.instrs[0x76] = instruction{name: "ROR", mode: addrModeZPX, cycles: 6, fn: c.ror}
-	c.instrs[0x78] = instruction{name: "SEI", mode: addrModeIMP, cycles: 2, fn: c.sei}
-	c.instrs[0x79] = instruction{name: "ADC", mode: addrModeABSY, cycles: 4, fn: c.adc}
-	c.instrs[0x7D] = instruction{name: "ADC", mode: addrModeABSX, cycles: 4, fn: c.adc}
-	c.instrs[0x7E] = instruction{name: "ROR", mode: addrModeABSX, cycles: 7, fn: c.ror}
-	c.instrs[0x81] = instruction{name: "STA", mode: addrModeINDX, cycles: 6, fn: c.sta}
-	c.instrs[0x84] = instruction{name: "STY", mode: addrModeZP, cycles: 3, fn: c.sty}
-	c.instrs[0x85] = instruction{name: "STA", mode: addrModeZP, cycles: 3, fn: c.sta}
-	c.instrs[0x86] = instruction{name: "STX", mode: addrModeZP, cycles: 3, fn: c.stx}
-	c.instrs[0x88] = instruction{name: "DEY", mode: addrModeIMP, cycles: 2, fn: c.dey}
-	c.instrs[0x8A] = instruction{name: "TXA", mode: addrModeIMP, cycles: 2, fn: c.txa}
-	c.instrs[0x8C] = instruction{name: "STY", mode: addrModeABS, cycles: 4, fn: c.sty}
-	c.instrs[0x8D] = instruction{name: "STA", mode: addrModeABS, cycles: 4, fn: c.sta}
-	c.instrs[0x8E] = instruction{name: "STX", mode: addrModeABS, cycles: 4, fn: c.stx}
-	c.instrs[0x90] = instruction{name: "BCC", mode: addrModeREL, cycles: 2, fn: c.bcc}
-	c.instrs[0x91] = instruction{name: "STA", mode: addrModeINDY, cycles: 6, fn: c.sta}
-	c.instrs[0x94] = instruction{name: "STY", mode: addrModeZPX, cycles: 4, fn: c.sty}
-	c.instrs[0x95] = instruction{name: "STA", mode: addrModeZPX, cycles: 4, fn: c.sta}
-	c.instrs[0x96] = instruction{name: "STX", mode: addrModeZPY, cycles: 4, fn: c.stx}
-	c.instrs[0x98] = instruction{name: "TYA", mode: addrModeIMP, cycles: 2, fn: c.tya}
-	c.instrs[0x99] = instruction{name: "STA", mode: addrModeABSY, cycles: 5, fn: c.sta}
-	c.instrs[0x9A] = instruction{name: "TXS", mode: addrModeIMP, cycles: 2, fn: c.txs}
-	c.instrs[0x9D] = instruction{name: "STA", mode: addrModeABSX, cycles: 5, fn: c.sta}
-	c.instrs[0xA0] = instruction{name: "LDY", mode: addrModeIMM, cycles: 2, fn: c.ldy}
-	c.instrs[0xA1] = instruction{name: "LDA", mode: addrModeINDX, cycles: 6, fn: c.lda}
-	c.instrs[0xA2] = instruction{name: "LDX", mode: addrModeIMM, cycles: 2, fn: c.ldx}
-	c.instrs[0xA4] = instruction{name: "LDY", mode: addrModeZP, cycles: 3, fn: c.ldy}
-	c.instrs[0xA5] = instruction{name: "LDA", mode: addrModeZP, cycles: 3, fn: c.lda}
-	c.instrs[0xA6] = instruction{name: "LDX", mode: addrModeZP, cycles: 3, fn: c.ldx}
-	c.instrs[0xA8] = instruction{name: "TAY", mode: addrModeIMP, cycles: 2, fn: c.tay}
-	c.instrs[0xA9] = instruction{name: "LDA", mode: addrModeIMM, cycles: 2, fn: c.lda}
-	c.instrs[0xAA] = instruction{name: "TAX", mode: addrModeIMP, cycles: 2, fn: c.tax}
-	c.instrs[0xAC] = instruction{name: "LDY", mode: addrModeABS, cycles: 4, fn: c.ldy}
-	c.instrs[0xAD] = instruction{name: "LDA", mode: addrModeABS, cycles: 4, fn: c.lda}
-	c.instrs[0xAE] = instruction{name: "LDX", mode: addrModeABS, cycles: 4, fn: c.ldx}
-	c.instrs[0xB0] = instruction{name: "BCS", mode: addrModeREL, cycles: 2, fn: c.bcs}
-	c.instrs[0xB1] = instruction{name: "LDA", mode: addrModeINDY, cycles: 5, fn: c.lda}
-	c.instrs[0xB4] = instruction{name: "LDY", mode: addrModeZPX, cycles: 4, fn: c.ldy}
-	c.instrs[0xB5] = instruction{name: "LDA", mode: addrModeZPX, cycles: 4, fn: c.lda}
-	c.instrs[0xB6] = instruction{name: "LDX", mode: addrModeZPY, cycles: 4, fn: c.ldx}
-	c.instrs[0xB8] = instruction{name: "CLV", mode: addrModeIMP, cycles: 2, fn: c.clv}
-	c.instrs[0xB9] = instruction{name: "LDA", mode: addrModeABSY, cycles: 4, fn: c.lda}
-	c.instrs[0xBA] = instruction{name: "TSX", mode: addrModeIMP, cycles: 2, fn: c.tsx}
-	c.instrs[0xBC] = instruction{name: "LDY", mode: addrModeABSX, cycles: 4, fn: c.ldy}
-	c.instrs[0xBD] = instruction{name: "LDA", mode: addrModeABSX, cycles: 4, fn: c.lda}
-	c.instrs[0xBE] = instruction{name: "LDX", mode: addrModeABSY, cycles: 4, fn: c.ldx}
-	c.instrs[0xC0] = instruction{name: "CPY", mode: addrModeIMM, cycles: 2, fn: c.cpy}
-	c.instrs[0xC1] = instruction{name: "CMP", mode: addrModeINDX, cycles: 6, fn: c.cmp}
-	c.instrs[0xC4] = instruction{name: "CPY", mode: addrModeZP, cycles: 3, fn: c.cpy}
-	c.instrs[0xC5] = instruction{name: "CMP", mode: addrModeZP, cycles: 3, fn: c.cmp}
-	c.instrs[0xC6] = instruction{name: "DEC", mode: addrModeZP, cycles: 5, fn: c.dec}
-	c.instrs[0xC8] = instruction{name: "INY", mode: addrModeIMP, cycles: 2, fn: c.iny}
-	c.instrs[0xC9] = instruction{name: "CMP", mode: addrModeIMM, cycles: 2, fn: c.cmp}
-	c.instrs[0xCA] = instruction{name: "DEX", mode: addrModeIMP, cycles: 2, fn: c.dex}
-	c.instrs[0xCC] = instruction{name: "CPY", mode: addrModeABS, cycles: 4, fn: c.cpy}
-	c.instrs[0xCD] = instruction{name: "CMP", mode: addrModeABS, cycles: 4, fn: c.cmp}
-	c.instrs[0xCE] = instruction{name: "DEC", mode: addrModeABS, cycles: 6, fn: c.dec}
-	c.instrs[0xD0] = instruction{name: "BNE", mode: addrModeREL, cycles: 2, fn: c.bne}
-	c.instrs[0xD1] = instruction{name: "CMP", mode: addrModeINDY, cycles: 5, fn: c.cmp}
-	c.instrs[0xD5] = instruction{name: "CMP", mode: addrModeZPX, cycles: 4, fn: c.cmp}
-	c.instrs[0xD6] = instruction{name: "DEC", mode: addrModeZPX, cycles: 6, fn: c.dec}
-	c.instrs[0xD8] = instruction{name: "CLD", mode: addrModeIMP, cycles: 2, fn: c.cld}
-	c.instrs[0xD9] = instruction{name: "CMP", mode: addrModeABSY, cycles: 4, fn: c.cmp}
-	c.instrs[0xDD] = instruction{name: "CMP", mode: addrModeABSX, cycles: 4, fn: c.cmp}
-	c.instrs[0xDE] = instruction{name: "DEC", mode: addrModeABSX, cycles: 7, fn: c.dec}
-	c.instrs[0xE0] = instruction{name: "CPX", mode: addrModeIMM, cycles: 2, fn: c.cpx}
-	c.instrs[0xE1] = instruction{name: "SBC", mode: addrModeINDX, cycles: 6, fn: c.sbc}
-	c.instrs[0xE4] = instruction{name: "CPX", mode: addrModeZP, cycles: 3, fn: c.cpx}
-	c.instrs[0xE5] = instruction{name: "SBC", mode: addrModeZP, cycles: 3, fn: c.sbc}
-	c.instrs[0xE6] = instruction{name: "INC", mode: addrModeZP, cycles: 5, fn: c.inc}
-	c.instrs[0xE8] = instruction{name: "INX", mode: addrModeIMP, cycles: 2, fn: c.inx}
-	c.instrs[0xE9] = instruction{name: "SBC", mode: addrModeIMM, cycles: 2, fn: c.sbc}
-	c.instrs[0xEA] = instruction{name: "NOP", mode: addrModeIMP, cycles: 2, fn: c.nop}
-	c.instrs[0xEC] = instruction{name: "CPX", mode: addrModeABS, cycles: 4, fn: c.cpx}
-	c.instrs[0xED] = instruction{name: "SBC", mode: addrModeABS, cycles: 4, fn: c.sbc}
-	c.instrs[0xEE] = instruction{name: "INC", mode: addrModeABS, cycles: 6, fn: c.inc}
-	c.instrs[0xF0] = instruction{name: "BEQ", mode: addrModeREL, cycles: 2, fn: c.beq}
-	c.instrs[0xF1] = instruction{name: "SBC", mode: addrModeINDY, cycles: 5, fn: c.sbc}
-	c.instrs[0xF5] = instruction{name: "SBC", mode: addrModeZPX, cycles: 4, fn: c.sbc}
-	c.instrs[0xF6] = instruction{name: "INC", mode: addrModeZPX, cycles: 6, fn: c.inc}
-	c.instrs[0xF8] = instruction{name: "SED", mode: addrModeIMP, cycles: 2, fn: c.sed}
-	c.instrs[0xF9] = instruction{name: "SBC", mode: addrModeABSY, cycles: 4, fn: c.sbc}
-	c.instrs[0xFD] = instruction{name: "SBC", mode: addrModeABSX, cycles: 4, fn: c.sbc}
-	c.instrs[0xFE] = instruction{name: "INC", mode: addrModeABSX, cycles: 7, fn: c.inc}
+	c.instrs[0x00] = instr{mode: addrModeIMP, fn: c.brk, cycles: 7}
+	c.instrs[0x01] = instr{mode: addrModeINDX, fn: c.ora, cycles: 6}
+	c.instrs[0x02] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0x03] = instr{mode: addrModeINDX, fn: c.slo, cycles: 8}
+	c.instrs[0x04] = instr{mode: addrModeZP, fn: c.nop, cycles: 3}
+	c.instrs[0x05] = instr{mode: addrModeZP, fn: c.ora, cycles: 3}
+	c.instrs[0x06] = instr{mode: addrModeZP, fn: c.asl, cycles: 5}
+	c.instrs[0x07] = instr{mode: addrModeZP, fn: c.slo, cycles: 5}
+	c.instrs[0x08] = instr{mode: addrModeIMP, fn: c.php, cycles: 3}
+	c.instrs[0x09] = instr{mode: addrModeIMM, fn: c.ora, cycles: 2}
+	c.instrs[0x0A] = instr{mode: addrModeACC, fn: c.asl, cycles: 2}
+	c.instrs[0x0B] = instr{mode: addrModeIMM, fn: c.anc, cycles: 2}
+	c.instrs[0x0C] = instr{mode: addrModeABS, fn: c.nop, cycles: 4}
+	c.instrs[0x0D] = instr{mode: addrModeABS, fn: c.ora, cycles: 4}
+	c.instrs[0x0E] = instr{mode: addrModeABS, fn: c.asl, cycles: 6}
+	c.instrs[0x0F] = instr{mode: addrModeABS, fn: c.slo, cycles: 6}
+	c.instrs[0x10] = instr{mode: addrModeREL, fn: c.bpl, cycles: 2}
+	c.instrs[0x11] = instr{mode: addrModeINDY, fn: c.ora, cycles: 5}
+	c.instrs[0x12] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0x13] = instr{mode: addrModeINDY, fn: c.slo, cycles: 8}
+	c.instrs[0x14] = instr{mode: addrModeZPX, fn: c.nop, cycles: 4}
+	c.instrs[0x15] = instr{mode: addrModeZPX, fn: c.ora, cycles: 4}
+	c.instrs[0x16] = instr{mode: addrModeZPX, fn: c.asl, cycles: 6}
+	c.instrs[0x17] = instr{mode: addrModeZPX, fn: c.slo, cycles: 6}
+	c.instrs[0x18] = instr{mode: addrModeIMP, fn: c.clc, cycles: 2}
+	c.instrs[0x19] = instr{mode: addrModeABSY, fn: c.ora, cycles: 4}
+	c.instrs[0x1A] = instr{mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0x1B] = instr{mode: addrModeABSY, fn: c.slo, cycles: 7}
+	c.instrs[0x1C] = instr{mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0x1D] = instr{mode: addrModeABSX, fn: c.ora, cycles: 4}
+	c.instrs[0x1E] = instr{mode: addrModeABSX, fn: c.asl, cycles: 7}
+	c.instrs[0x1F] = instr{mode: addrModeABSX, fn: c.slo, cycles: 7}
+	c.instrs[0x20] = instr{mode: addrModeABS, fn: c.jsr, cycles: 6}
+	c.instrs[0x21] = instr{mode: addrModeINDX, fn: c.and, cycles: 6}
+	c.instrs[0x22] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0x23] = instr{mode: addrModeINDX, fn: c.rla, cycles: 8}
+	c.instrs[0x24] = instr{mode: addrModeZP, fn: c.bit, cycles: 3}
+	c.instrs[0x25] = instr{mode: addrModeZP, fn: c.and, cycles: 3}
+	c.instrs[0x26] = instr{mode: addrModeZP, fn: c.rol, cycles: 5}
+	c.instrs[0x27] = instr{mode: addrModeZP, fn: c.rla, cycles: 5}
+	c.instrs[0x28] = instr{mode: addrModeIMP, fn: c.plp, cycles: 4}
+	c.instrs[0x29] = instr{mode: addrModeIMM, fn: c.and, cycles: 2}
+	c.instrs[0x2A] = instr{mode: addrModeACC, fn: c.rol, cycles: 2}
+	c.instrs[0x2B] = instr{mode: addrModeIMM, fn: c.anc, cycles: 2}
+	c.instrs[0x2C] = instr{mode: addrModeABS, fn: c.bit, cycles: 4}
+	c.instrs[0x2D] = instr{mode: addrModeABS, fn: c.and, cycles: 4}
+	c.instrs[0x2E] = instr{mode: addrModeABS, fn: c.rol, cycles: 6}
+	c.instrs[0x2F] = instr{mode: addrModeABS, fn: c.rla, cycles: 6}
+	c.instrs[0x30] = instr{mode: addrModeREL, fn: c.bmi, cycles: 2}
+	c.instrs[0x31] = instr{mode: addrModeINDY, fn: c.and, cycles: 5}
+	c.instrs[0x32] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0x33] = instr{mode: addrModeINDY, fn: c.rla, cycles: 8}
+	c.instrs[0x34] = instr{mode: addrModeZPX, fn: c.nop, cycles: 4}
+	c.instrs[0x35] = instr{mode: addrModeZPX, fn: c.and, cycles: 4}
+	c.instrs[0x36] = instr{mode: addrModeZPX, fn: c.rol, cycles: 6}
+	c.instrs[0x37] = instr{mode: addrModeZPX, fn: c.rla, cycles: 6}
+	c.instrs[0x38] = instr{mode: addrModeIMP, fn: c.sec, cycles: 2}
+	c.instrs[0x39] = instr{mode: addrModeABSY, fn: c.and, cycles: 4}
+	c.instrs[0x3A] = instr{mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0x3B] = instr{mode: addrModeABSY, fn: c.rla, cycles: 7}
+	c.instrs[0x3C] = instr{mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0x3D] = instr{mode: addrModeABSX, fn: c.and, cycles: 4}
+	c.instrs[0x3E] = instr{mode: addrModeABSX, fn: c.rol, cycles: 7}
+	c.instrs[0x3F] = instr{mode: addrModeABSX, fn: c.rla, cycles: 7}
+	c.instrs[0x40] = instr{mode: addrModeIMP, fn: c.rti, cycles: 6}
+	c.instrs[0x41] = instr{mode: addrModeINDX, fn: c.eor, cycles: 6}
+	c.instrs[0x42] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0x43] = instr{mode: addrModeINDX, fn: c.sre, cycles: 8}
+	c.instrs[0x44] = instr{mode: addrModeZP, fn: c.nop, cycles: 3}
+	c.instrs[0x45] = instr{mode: addrModeZP, fn: c.eor, cycles: 3}
+	c.instrs[0x46] = instr{mode: addrModeZP, fn: c.lsr, cycles: 5}
+	c.instrs[0x47] = instr{mode: addrModeZP, fn: c.sre, cycles: 5}
+	c.instrs[0x48] = instr{mode: addrModeIMP, fn: c.pha, cycles: 3}
+	c.instrs[0x49] = instr{mode: addrModeIMM, fn: c.eor, cycles: 2}
+	c.instrs[0x4A] = instr{mode: addrModeACC, fn: c.lsr, cycles: 2}
+	c.instrs[0x4B] = instr{mode: addrModeIMM, fn: c.alr, cycles: 2}
+	c.instrs[0x4C] = instr{mode: addrModeABS, fn: c.jmp, cycles: 3}
+	c.instrs[0x4D] = instr{mode: addrModeABS, fn: c.eor, cycles: 4}
+	c.instrs[0x4E] = instr{mode: addrModeABS, fn: c.lsr, cycles: 6}
+	c.instrs[0x4F] = instr{mode: addrModeABS, fn: c.sre, cycles: 6}
+	c.instrs[0x50] = instr{mode: addrModeREL, fn: c.bvc, cycles: 2}
+	c.instrs[0x51] = instr{mode: addrModeINDY, fn: c.eor, cycles: 5}
+	c.instrs[0x52] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0x53] = instr{mode: addrModeINDY, fn: c.sre, cycles: 8}
+	c.instrs[0x54] = instr{mode: addrModeZPX, fn: c.nop, cycles: 4}
+	c.instrs[0x55] = instr{mode: addrModeZPX, fn: c.eor, cycles: 4}
+	c.instrs[0x56] = instr{mode: addrModeZPX, fn: c.lsr, cycles: 6}
+	c.instrs[0x57] = instr{mode: addrModeZPX, fn: c.sre, cycles: 6}
+	c.instrs[0x58] = instr{mode: addrModeIMP, fn: c.cli, cycles: 2}
+	c.instrs[0x59] = instr{mode: addrModeABSY, fn: c.eor, cycles: 4}
+	c.instrs[0x5A] = instr{mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0x5B] = instr{mode: addrModeABSY, fn: c.sre, cycles: 7}
+	c.instrs[0x5C] = instr{mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0x5D] = instr{mode: addrModeABSX, fn: c.eor, cycles: 4}
+	c.instrs[0x5E] = instr{mode: addrModeABSX, fn: c.lsr, cycles: 7}
+	c.instrs[0x5F] = instr{mode: addrModeABSX, fn: c.sre, cycles: 7}
+	c.instrs[0x60] = instr{mode: addrModeIMP, fn: c.rts, cycles: 6}
+	c.instrs[0x61] = instr{mode: addrModeINDX, fn: c.adc, cycles: 6}
+	c.instrs[0x62] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0x63] = instr{mode: addrModeINDX, fn: c.rra, cycles: 8}
+	c.instrs[0x64] = instr{mode: addrModeZP, fn: c.nop, cycles: 3}
+	c.instrs[0x65] = instr{mode: addrModeZP, fn: c.adc, cycles: 3}
+	c.instrs[0x66] = instr{mode: addrModeZP, fn: c.ror, cycles: 5}
+	c.instrs[0x67] = instr{mode: addrModeZP, fn: c.rra, cycles: 5}
+	c.instrs[0x68] = instr{mode: addrModeIMP, fn: c.pla, cycles: 4}
+	c.instrs[0x69] = instr{mode: addrModeIMM, fn: c.adc, cycles: 2}
+	c.instrs[0x6A] = instr{mode: addrModeACC, fn: c.ror, cycles: 2}
+	c.instrs[0x6C] = instr{mode: addrModeIND, fn: c.jmp, cycles: 5}
+	c.instrs[0x6D] = instr{mode: addrModeABS, fn: c.adc, cycles: 4}
+	c.instrs[0x6E] = instr{mode: addrModeABS, fn: c.ror, cycles: 6}
+	c.instrs[0x6F] = instr{mode: addrModeABS, fn: c.rra, cycles: 6}
+	c.instrs[0x70] = instr{mode: addrModeREL, fn: c.bvs, cycles: 2}
+	c.instrs[0x71] = instr{mode: addrModeINDY, fn: c.adc, cycles: 5}
+	c.instrs[0x72] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0x73] = instr{mode: addrModeINDY, fn: c.rra, cycles: 8}
+	c.instrs[0x74] = instr{mode: addrModeZPX, fn: c.nop, cycles: 4}
+	c.instrs[0x75] = instr{mode: addrModeZPX, fn: c.adc, cycles: 4}
+	c.instrs[0x76] = instr{mode: addrModeZPX, fn: c.ror, cycles: 6}
+	c.instrs[0x77] = instr{mode: addrModeZPX, fn: c.rra, cycles: 6}
+	c.instrs[0x78] = instr{mode: addrModeIMP, fn: c.sei, cycles: 2}
+	c.instrs[0x79] = instr{mode: addrModeABSY, fn: c.adc, cycles: 4}
+	c.instrs[0x7A] = instr{mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0x7B] = instr{mode: addrModeABSY, fn: c.rra, cycles: 7}
+	c.instrs[0x7C] = instr{mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0x7D] = instr{mode: addrModeABSX, fn: c.adc, cycles: 4}
+	c.instrs[0x7E] = instr{mode: addrModeABSX, fn: c.ror, cycles: 7}
+	c.instrs[0x7F] = instr{mode: addrModeABSX, fn: c.rra, cycles: 7}
+	c.instrs[0x80] = instr{mode: addrModeREL, fn: c.nop, cycles: 2}
+	c.instrs[0x81] = instr{mode: addrModeINDX, fn: c.sta, cycles: 6}
+	c.instrs[0x82] = instr{mode: addrModeIMM, fn: c.nop, cycles: 2}
+	c.instrs[0x83] = instr{mode: addrModeINDX, fn: c.sax, cycles: 6}
+	c.instrs[0x84] = instr{mode: addrModeZP, fn: c.sty, cycles: 3}
+	c.instrs[0x85] = instr{mode: addrModeZP, fn: c.sta, cycles: 3}
+	c.instrs[0x86] = instr{mode: addrModeZP, fn: c.stx, cycles: 3}
+	c.instrs[0x87] = instr{mode: addrModeZP, fn: c.sax, cycles: 3}
+	c.instrs[0x88] = instr{mode: addrModeIMP, fn: c.dey, cycles: 2}
+	c.instrs[0x89] = instr{mode: addrModeIMM, fn: c.nop, cycles: 2}
+	c.instrs[0x8A] = instr{mode: addrModeIMP, fn: c.txa, cycles: 2}
+	c.instrs[0x8C] = instr{mode: addrModeABS, fn: c.sty, cycles: 4}
+	c.instrs[0x8D] = instr{mode: addrModeABS, fn: c.sta, cycles: 4}
+	c.instrs[0x8E] = instr{mode: addrModeABS, fn: c.stx, cycles: 4}
+	c.instrs[0x8F] = instr{mode: addrModeABS, fn: c.sax, cycles: 4}
+	c.instrs[0x90] = instr{mode: addrModeREL, fn: c.bcc, cycles: 2}
+	c.instrs[0x91] = instr{mode: addrModeINDY, fn: c.sta, cycles: 6}
+	c.instrs[0x92] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0x94] = instr{mode: addrModeZPX, fn: c.sty, cycles: 4}
+	c.instrs[0x95] = instr{mode: addrModeZPX, fn: c.sta, cycles: 4}
+	c.instrs[0x96] = instr{mode: addrModeZPY, fn: c.stx, cycles: 4}
+	c.instrs[0x97] = instr{mode: addrModeZPY, fn: c.sax, cycles: 4}
+	c.instrs[0x98] = instr{mode: addrModeIMP, fn: c.tya, cycles: 2}
+	c.instrs[0x99] = instr{mode: addrModeABSY, fn: c.sta, cycles: 5}
+	c.instrs[0x9A] = instr{mode: addrModeIMP, fn: c.txs, cycles: 2}
+	c.instrs[0x9D] = instr{mode: addrModeABSX, fn: c.sta, cycles: 5}
+	c.instrs[0xA0] = instr{mode: addrModeIMM, fn: c.ldy, cycles: 2}
+	c.instrs[0xA1] = instr{mode: addrModeINDX, fn: c.lda, cycles: 6}
+	c.instrs[0xA2] = instr{mode: addrModeIMM, fn: c.ldx, cycles: 2}
+	c.instrs[0xA3] = instr{mode: addrModeINDX, fn: c.lax, cycles: 6}
+	c.instrs[0xA4] = instr{mode: addrModeZP, fn: c.ldy, cycles: 3}
+	c.instrs[0xA5] = instr{mode: addrModeZP, fn: c.lda, cycles: 3}
+	c.instrs[0xA6] = instr{mode: addrModeZP, fn: c.ldx, cycles: 3}
+	c.instrs[0xA7] = instr{mode: addrModeZP, fn: c.lax, cycles: 3}
+	c.instrs[0xA8] = instr{mode: addrModeIMP, fn: c.tay, cycles: 2}
+	c.instrs[0xA9] = instr{mode: addrModeIMM, fn: c.lda, cycles: 2}
+	c.instrs[0xAA] = instr{mode: addrModeIMP, fn: c.tax, cycles: 2}
+	c.instrs[0xAC] = instr{mode: addrModeABS, fn: c.ldy, cycles: 4}
+	c.instrs[0xAD] = instr{mode: addrModeABS, fn: c.lda, cycles: 4}
+	c.instrs[0xAE] = instr{mode: addrModeABS, fn: c.ldx, cycles: 4}
+	c.instrs[0xAF] = instr{mode: addrModeABS, fn: c.lax, cycles: 4}
+	c.instrs[0xB0] = instr{mode: addrModeREL, fn: c.bcs, cycles: 2}
+	c.instrs[0xB1] = instr{mode: addrModeINDY, fn: c.lda, cycles: 5}
+	c.instrs[0xB2] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0xB3] = instr{mode: addrModeINDY, fn: c.lax, cycles: 5}
+	c.instrs[0xB4] = instr{mode: addrModeZPX, fn: c.ldy, cycles: 4}
+	c.instrs[0xB5] = instr{mode: addrModeZPX, fn: c.lda, cycles: 4}
+	c.instrs[0xB6] = instr{mode: addrModeZPY, fn: c.ldx, cycles: 4}
+	c.instrs[0xB7] = instr{mode: addrModeZPY, fn: c.lax, cycles: 4}
+	c.instrs[0xB8] = instr{mode: addrModeIMP, fn: c.clv, cycles: 2}
+	c.instrs[0xB9] = instr{mode: addrModeABSY, fn: c.lda, cycles: 4}
+	c.instrs[0xBA] = instr{mode: addrModeIMP, fn: c.tsx, cycles: 2}
+	c.instrs[0xBB] = instr{mode: addrModeABSY, fn: c.las, cycles: 4}
+	c.instrs[0xBC] = instr{mode: addrModeABSX, fn: c.ldy, cycles: 4}
+	c.instrs[0xBD] = instr{mode: addrModeABSX, fn: c.lda, cycles: 4}
+	c.instrs[0xBE] = instr{mode: addrModeABSY, fn: c.ldx, cycles: 4}
+	c.instrs[0xBF] = instr{mode: addrModeABSY, fn: c.lax, cycles: 4}
+	c.instrs[0xC0] = instr{mode: addrModeIMM, fn: c.cpy, cycles: 2}
+	c.instrs[0xC1] = instr{mode: addrModeINDX, fn: c.cmp, cycles: 6}
+	c.instrs[0xC2] = instr{mode: addrModeIMM, fn: c.nop, cycles: 2}
+	c.instrs[0xC3] = instr{mode: addrModeINDX, fn: c.dcp, cycles: 8}
+	c.instrs[0xC4] = instr{mode: addrModeZP, fn: c.cpy, cycles: 3}
+	c.instrs[0xC5] = instr{mode: addrModeZP, fn: c.cmp, cycles: 3}
+	c.instrs[0xC6] = instr{mode: addrModeZP, fn: c.dec, cycles: 5}
+	c.instrs[0xC7] = instr{mode: addrModeZP, fn: c.dcp, cycles: 5}
+	c.instrs[0xC8] = instr{mode: addrModeIMP, fn: c.iny, cycles: 2}
+	c.instrs[0xC9] = instr{mode: addrModeIMM, fn: c.cmp, cycles: 2}
+	c.instrs[0xCA] = instr{mode: addrModeIMP, fn: c.dex, cycles: 2}
+	c.instrs[0xCB] = instr{mode: addrModeIMM, fn: c.axs, cycles: 2}
+	c.instrs[0xCC] = instr{mode: addrModeABS, fn: c.cpy, cycles: 4}
+	c.instrs[0xCD] = instr{mode: addrModeABS, fn: c.cmp, cycles: 4}
+	c.instrs[0xCE] = instr{mode: addrModeABS, fn: c.dec, cycles: 6}
+	c.instrs[0xCF] = instr{mode: addrModeABS, cycles: 6, fn: c.dcp}
+	c.instrs[0xD0] = instr{mode: addrModeREL, fn: c.bne, cycles: 2}
+	c.instrs[0xD1] = instr{mode: addrModeINDY, fn: c.cmp, cycles: 5}
+	c.instrs[0xD2] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0xD3] = instr{mode: addrModeINDY, fn: c.dcp, cycles: 8}
+	c.instrs[0xD4] = instr{mode: addrModeZPX, fn: c.nop, cycles: 4}
+	c.instrs[0xD5] = instr{mode: addrModeZPX, fn: c.cmp, cycles: 4}
+	c.instrs[0xD6] = instr{mode: addrModeZPX, fn: c.dec, cycles: 6}
+	c.instrs[0xD7] = instr{mode: addrModeZPX, fn: c.dcp, cycles: 6}
+	c.instrs[0xD8] = instr{mode: addrModeIMP, fn: c.cld, cycles: 2}
+	c.instrs[0xD9] = instr{mode: addrModeABSY, fn: c.cmp, cycles: 4}
+	c.instrs[0xDA] = instr{mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0xDB] = instr{mode: addrModeABSY, fn: c.dcp, cycles: 7}
+	c.instrs[0xDC] = instr{mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0xDD] = instr{mode: addrModeABSX, fn: c.cmp, cycles: 4}
+	c.instrs[0xDE] = instr{mode: addrModeABSX, fn: c.dec, cycles: 7}
+	c.instrs[0xDF] = instr{mode: addrModeABSX, fn: c.dcp, cycles: 7}
+	c.instrs[0xE0] = instr{mode: addrModeIMM, fn: c.cpx, cycles: 2}
+	c.instrs[0xE1] = instr{mode: addrModeINDX, fn: c.sbc, cycles: 6}
+	c.instrs[0xE2] = instr{mode: addrModeIMM, fn: c.nop, cycles: 2}
+	c.instrs[0xE3] = instr{mode: addrModeINDX, fn: c.isc, cycles: 8}
+	c.instrs[0xE4] = instr{mode: addrModeZP, fn: c.cpx, cycles: 3}
+	c.instrs[0xE5] = instr{mode: addrModeZP, fn: c.sbc, cycles: 3}
+	c.instrs[0xE6] = instr{mode: addrModeZP, fn: c.inc, cycles: 5}
+	c.instrs[0xE7] = instr{mode: addrModeZP, fn: c.isc, cycles: 5}
+	c.instrs[0xE8] = instr{mode: addrModeIMP, fn: c.inx, cycles: 2}
+	c.instrs[0xE9] = instr{mode: addrModeIMM, fn: c.sbc, cycles: 2}
+	c.instrs[0xEA] = instr{mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0xEB] = instr{mode: addrModeIMM, fn: c.sbc, cycles: 2}
+	c.instrs[0xEC] = instr{mode: addrModeABS, fn: c.cpx, cycles: 4}
+	c.instrs[0xED] = instr{mode: addrModeABS, fn: c.sbc, cycles: 4}
+	c.instrs[0xEE] = instr{mode: addrModeABS, fn: c.inc, cycles: 6}
+	c.instrs[0xEF] = instr{mode: addrModeABS, fn: c.isc, cycles: 6}
+	c.instrs[0xF0] = instr{mode: addrModeREL, fn: c.beq, cycles: 2}
+	c.instrs[0xF1] = instr{mode: addrModeINDY, fn: c.sbc, cycles: 5}
+	c.instrs[0xF2] = instr{mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0xF3] = instr{mode: addrModeINDY, fn: c.isc, cycles: 8}
+	c.instrs[0xF4] = instr{mode: addrModeZPX, fn: c.nop, cycles: 4}
+	c.instrs[0xF5] = instr{mode: addrModeZPX, fn: c.sbc, cycles: 4}
+	c.instrs[0xF6] = instr{mode: addrModeZPX, fn: c.inc, cycles: 6}
+	c.instrs[0xF7] = instr{mode: addrModeZPX, fn: c.isc, cycles: 6}
+	c.instrs[0xF8] = instr{mode: addrModeIMP, fn: c.sed, cycles: 2}
+	c.instrs[0xF9] = instr{mode: addrModeABSY, fn: c.sbc, cycles: 4}
+	c.instrs[0xFA] = instr{mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0xFB] = instr{mode: addrModeABSY, fn: c.isc, cycles: 7}
+	c.instrs[0xFC] = instr{mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0xFD] = instr{mode: addrModeABSX, fn: c.sbc, cycles: 4}
+	c.instrs[0xFE] = instr{mode: addrModeABSX, fn: c.inc, cycles: 7}
+	c.instrs[0xFF] = instr{mode: addrModeABSX, fn: c.isc, cycles: 7}
 }
