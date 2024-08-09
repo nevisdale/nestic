@@ -47,8 +47,10 @@ func (c cpuMemory) Read8(addr uint16) uint8 {
 		return c.bus.ppu.readRegister(addr & 0x7)
 	// read from apu
 	case addr < 0x4018:
+		return 0
 	// read from io
 	case addr < 0x4020:
+		return 0
 	// read from cartridge
 	case addr <= 0xFFFF:
 		return c.bus.cart.Read8(addr)
