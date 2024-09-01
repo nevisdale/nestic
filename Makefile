@@ -8,7 +8,7 @@ NESTEST_BIN=$(TESTDATA)/nestest.nes
 
 .PHONY: .bindeps
 .bindeps:
-	GOBIN=$(LOCAL_BIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1
+	GOBIN=$(LOCAL_BIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3
 
 .PHONY: build
 build:
@@ -39,7 +39,7 @@ run: build
 	$(LOCAL_BIN)/$(OUT_NAME)
 
 .PHONY: clean
-clean: 
+clean:
 	rm -rf bin
 	rm -rf $(TESTDATA)
 	rm -rf $(TEST_COVER_OUT)
