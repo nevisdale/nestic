@@ -3,19 +3,37 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
-	"time"
 
 	"github.com/nevisdale/nestic/internal/nes"
+	"github.com/nevisdale/nestic/internal/ui"
+	"github.com/pkg/profile"
 )
 
 var (
-	romPath string
+	romPath      string
+	pprofProfile string
 )
 
 func main() {
 	flag.StringVar(&romPath, "rom", "", "path to the ROM file")
+	flag.StringVar(&pprofProfile, "pprof", "", "profile type. cpu|mem")
 	flag.Parse()
+
+	if romPath == "" {
+		fmt.Fprintf(os.Stderr, "usage: %s -rom <path to ROM file>\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	if pprofProfile != "" {
+		switch pprofProfile {
+		case "cpu":
+			defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
+		case "mem":
+			defer profile.Start(profile.MemProfile, profile.ProfilePath(".")).Stop()
+		}
+	}
 
 	cart, err := nes.NewCartFromFile(romPath)
 	if err != nil {
@@ -27,9 +45,8 @@ func main() {
 	nes.LoadCart(cart)
 	nes.Reset()
 
-	for {
-		nes.Tic()
-		time.Sleep(time.Second / 60)
+	window := ui.New(nes)
+	if err := ui.RunUI(window); err != nil {
+		log.Fatal(err)
 	}
-
 }
