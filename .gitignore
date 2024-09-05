@@ -3,3 +3,4 @@ bin
 roms
 cover.out
 .testdata
+*.pprof
