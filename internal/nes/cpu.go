@@ -217,37 +217,48 @@ func (c *CPU) Disassemble() map[uint16]string {
 		}
 
 		pc++
+		skip := uint32(0)
 		switch instr.mode {
 		case addrModeIMM:
 			operand := c.read8(pc)
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s #$%02X {%s}", addr, instr.name, operand, instr.mode)
+			skip = 1
 		case addrModeZP:
 			operand := c.read8(pc)
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%02X {%s}", addr, instr.name, operand, instr.mode)
+			skip = 1
 		case addrModeZPX:
 			operand := c.read8(pc)
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%02X,X {%s}", addr, instr.name, operand, instr.mode)
+			skip = 1
 		case addrModeZPY:
 			operand := c.read8(pc)
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%02X,Y {%s}", addr, instr.name, operand, instr.mode)
+			skip = 1
 		case addrModeABS:
 			operand := c.read16(pc)
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%04X {%s}", addr, instr.name, operand, instr.mode)
+			skip = 2
 		case addrModeABSX:
 			operand := c.read16(pc)
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%04X,X {%s}", addr, instr.name, operand, instr.mode)
+			skip = 2
 		case addrModeABSY:
 			operand := c.read16(pc)
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%04X,Y {%s}", addr, instr.name, operand, instr.mode)
+			skip = 2
 		case addrModeIND:
 			operand := c.read16(pc)
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s ($%04X) {%s}", addr, instr.name, operand, instr.mode)
+			skip = 2
 		case addrModeINDX:
 			operand := c.read8(pc)
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s ($%02X,X) {%s}", addr, instr.name, operand, instr.mode)
+			skip = 1
 		case addrModeINDY:
 			operand := c.read8(pc)
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s ($%02X),Y {%s}", addr, instr.name, operand, instr.mode)
+			skip = 1
 		case addrModeREL:
 			operand := uint16(c.read8(pc))
 			pc++
@@ -255,13 +266,14 @@ func (c *CPU) Disassemble() map[uint16]string {
 				operand |= 0xFF00 // add leading 1 s to save the sign
 			}
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%02X {%s}", addr, instr.name, pc+operand, instr.mode)
+			skip = 1
 		case addrModeACC:
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s A {%s}", addr, instr.name, instr.mode)
 		case addrModeIMP:
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s {%s}", addr, instr.name, instr.mode)
 		}
 
-		addr++
+		addr = addr + 1 + skip
 	}
 
 	return disasm
