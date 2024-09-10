@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"image/color"
+	"slices"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -69,13 +70,43 @@ func (ui *UI) Draw(screen *ebiten.Image) {
 	fmt.Fprintf(&infoStr, " Y: $%02X [%03d]\n", info.Y, info.Y)
 	fmt.Fprintf(&infoStr, " SP: $%02X\n", info.SP)
 
-	for i := max(0, info.PC-7); i < info.PC; i++ {
-		infoStr.WriteString(" " + ui.disasm[i] + "\n")
+	var disasm strings.Builder
+	{
+		disasmBefore := make([]string, 0, 7)
+		for i := uint16(1); len(disasmBefore) < 7 && info.PC-i < 0xFFFF; i++ {
+			if line, ok := ui.disasm[info.PC-i]; ok {
+				disasmBefore = append(disasmBefore, line)
+			}
+		}
+		slices.Reverse(disasmBefore)
+		for _, line := range disasmBefore {
+			disasm.WriteString(" " + line + "\n")
+		}
+
+		disasm.WriteString("*" + ui.disasm[info.PC] + "\n")
+
+		disasmAfter := make([]string, 0, 7)
+
+		for i := uint16(1); len(disasmAfter) < 7 && info.PC+i < 0xFFFF; i++ {
+			if line, ok := ui.disasm[info.PC+i]; ok {
+				disasmAfter = append(disasmAfter, line)
+			}
+
+		}
+		for _, line := range disasmAfter {
+			disasm.WriteString(" " + line + "\n")
+		}
 	}
-	infoStr.WriteString("*" + ui.disasm[info.PC] + "\n")
-	for i := info.PC + 1; i < min(0xFFFF, info.PC+7); i++ {
-		infoStr.WriteString(" " + ui.disasm[i] + "\n")
-	}
+
+	// for i := max(0, info.PC-7); i < info.PC; i++ {
+	// 	infoStr.WriteString(" " + ui.disasm[i] + "\n")
+	// }
+	// infoStr.WriteString("*" + ui.disasm[info.PC] + "\n")
+	// for i := info.PC + 1; i < min(0xFFFF, info.PC+7); i++ {
+	// 	infoStr.WriteString(" " + ui.disasm[i] + "\n")
+	// }
+
+	infoStr.WriteString(disasm.String())
 
 	debugScreenOffsetX := float32(gameScreenWidth * gameScreenScale)
 	vector.DrawFilledRect(screen, debugScreenOffsetX, 0, debugScreenWidth, debugScreenHeight, color.RGBA{50, 50, 50, 255}, false)
@@ -90,7 +121,7 @@ func (ui *UI) Draw(screen *ebiten.Image) {
 
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Scale(4, 4)
-		op.GeoM.Translate(float64(debugScreenOffsetX)+10+float64(i*35), debugScreenHeight-128-20)
+		op.GeoM.Translate(float64(debugScreenOffsetX)+10+float64(i*35), debugScreenHeight-128-15)
 		screen.DrawImage(paletteImg, op)
 
 	}
@@ -113,7 +144,7 @@ const (
 	gameScreenWidth  = 256
 	gameScreenHeight = 240
 
-	debugScreenWidth  = 286
+	debugScreenWidth  = 280
 	debugScreenHeight = gameScreenHeight * gameScreenScale
 )
 
