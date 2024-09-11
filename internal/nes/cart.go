@@ -20,6 +20,7 @@ type Cart struct {
 	pgrBanks uint8
 	chrBanks uint8
 	mapperID uint8
+	mirror   uint8 // 0: horizontal, 1: vertical
 
 	mapper Mapper
 }
@@ -70,6 +71,7 @@ func NewCartFromFile(path string) (*Cart, error) {
 		mapperID: mapperID,
 	}
 	cart.mapper = NewMapper(cart)
+	cart.mirror = header.Flags6 & 0x1
 
 	if n, err := file.Read(cart.pgrMem); n != len(cart.pgrMem) || err != nil {
 		if err == nil {
