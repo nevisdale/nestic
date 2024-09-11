@@ -101,7 +101,32 @@ func (p ppuMemory) Read8(addr uint16) uint8 {
 	switch {
 	case addr < 0x2000:
 		return p.bus.cart.Read8(addr)
-	case addr >= 0x3F00:
+
+	case addr < 0x3F00:
+		addr &= 0x0FFF
+
+		// vertial:    0:0, 1:0, 2:1, 3:1
+		// horizontal: 0:0, 1:1, 2:0, 3:1
+		index := uint8(0)
+		switch {
+		case addr < 0x400: // nametable 0
+			// the same for vertical and horizontal
+			index = 0
+		case addr < 0x800: // nametable 1
+			// vertical (1) -> 0
+			// horizontal (0) -> 1
+			index = (^p.bus.cart.mirror) & 0x1
+		case addr < 0xC00: // nametable 2
+			// vertical (1) -> 1
+			// horizontal (0) -> 0
+			index = p.bus.cart.mirror
+		case addr < 0x1000: // nametable 3
+			// the same for vertical and horizontal
+			index = 1
+		}
+		return p.bus.ppu.readNametable(index, addr&0x3FF)
+
+	case addr < 0x4000:
 		return p.bus.ppu.readPalette(addr)
 	}
 	return 0
@@ -110,7 +135,32 @@ func (p ppuMemory) Read8(addr uint16) uint8 {
 func (p *ppuMemory) Write8(addr uint16, data uint8) {
 	addr &= 0x3FFF
 	switch {
-	case addr >= 0x3F00:
+	case addr < 0x3F00:
+		addr &= 0x0FFF
+
+		// vertial:    0:0, 1:0, 2:1, 3:1
+		// horizontal: 0:0, 1:1, 2:0, 3:1
+		index := uint8(0)
+		switch {
+		case addr < 0x400: // nametable 0
+			// the same for vertical and horizontal
+			index = 0
+		case addr < 0x800: // nametable 1
+			// vertical (1) -> 0
+			// horizontal (0) -> 1
+			index = (^p.bus.cart.mirror) & 0x1
+		case addr < 0xC00: // nametable 2
+			// vertical (1) -> 1
+			// horizontal (0) -> 0
+			index = p.bus.cart.mirror
+		case addr < 0x1000: // nametable 3
+			// the same for vertical and horizontal
+			index = 1
+		}
+		addr = addr & 0x3FF
+		p.bus.ppu.writeNametable(index, addr, data)
+
+	case addr < 0x4000:
 		p.bus.ppu.writePalette(addr, data)
 	}
 }
