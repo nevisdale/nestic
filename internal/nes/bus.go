@@ -86,6 +86,14 @@ func (b *Bus) OneStepAndStop() {
 	b.stopped = false
 }
 
+func (b *Bus) ReadNameTable(index uint8, addr uint16) uint8 {
+	return b.ppu.readNametable(index, addr)
+}
+
+func (b *Bus) GetBgTileById(palette, index uint8) *image.RGBA {
+	return b.ppu.GetBgTileById(palette, index)
+}
+
 func (b *Bus) Disassemble() map[uint16]string {
 	return b.cpu.Disassemble()
 }
