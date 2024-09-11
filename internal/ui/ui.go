@@ -23,13 +23,17 @@ type UI struct {
 	bus    *nes.Bus
 	disasm map[uint16]string
 
-	palette uint8
+	palette     uint8
+	printTileId bool
+
+	ppuTileCache map[uint16]*ebiten.Image
 }
 
 func New(bus *nes.Bus) *UI {
 	return &UI{
-		bus:    bus,
-		disasm: bus.Disassemble(),
+		bus:          bus,
+		disasm:       bus.Disassemble(),
+		ppuTileCache: make(map[uint16]*ebiten.Image),
 	}
 }
 
@@ -37,6 +41,10 @@ func (ui *UI) Update() error {
 	// if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
 	// 	ui.showDebugInfo = !ui.showDebugInfo
 	// }
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyT) {
+		ui.printTileId = !ui.printTileId
+	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyC) {
 		ui.palette++
@@ -98,14 +106,6 @@ func (ui *UI) Draw(screen *ebiten.Image) {
 		}
 	}
 
-	// for i := max(0, info.PC-7); i < info.PC; i++ {
-	// 	infoStr.WriteString(" " + ui.disasm[i] + "\n")
-	// }
-	// infoStr.WriteString("*" + ui.disasm[info.PC] + "\n")
-	// for i := info.PC + 1; i < min(0xFFFF, info.PC+7); i++ {
-	// 	infoStr.WriteString(" " + ui.disasm[i] + "\n")
-	// }
-
 	infoStr.WriteString(disasm.String())
 
 	debugScreenOffsetX := float32(gameScreenWidth * gameScreenScale)
@@ -133,10 +133,29 @@ func (ui *UI) Draw(screen *ebiten.Image) {
 		screen.DrawImage(tilesImg, op)
 	}
 
-	img := ebiten.NewImageFromImage(ui.bus.Screen())
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(gameScreenScale, gameScreenScale)
-	screen.DrawImage(img, op)
+	for y := 0; y < 30; y++ {
+		for x := 0; x < 32; x++ {
+			addr := uint16(y*32 + x)
+			tileId := ui.bus.ReadNameTable(0, addr)
+			var tileImg *ebiten.Image
+			if img, ok := ui.ppuTileCache[uint16(ui.palette)<<8|uint16(tileId)]; ok {
+				tileImg = img
+			} else {
+				tileImg = ebiten.NewImageFromImage(ui.bus.GetBgTileById(ui.palette, tileId))
+				ui.ppuTileCache[uint16(ui.palette)<<8|uint16(tileId)] = tileImg
+			}
+
+			// draw tileID
+			if ui.printTileId {
+				ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%02X", tileId), x*8*gameScreenScale, y*8*gameScreenScale)
+			} else {
+				op := &ebiten.DrawImageOptions{}
+				op.GeoM.Translate(float64(x*8), float64(y*8))
+				op.GeoM.Scale(gameScreenScale, gameScreenScale)
+				screen.DrawImage(tileImg, op)
+			}
+		}
+	}
 }
 
 const (
