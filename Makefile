@@ -5,6 +5,8 @@ TEST_COVER_OUT=cover.out
 TESTDATA=$(CURDIR)/.testdata
 NESTEST_LOG=$(TESTDATA)/nestest.log
 NESTEST_BIN=$(TESTDATA)/nestest.nes
+SINGLE_STEP_TESTS_DIR=$(TESTDATA)/65x02
+SINGLE_STEP_TESTS=$(SINGLE_STEP_TESTS_DIR)/nes6502/v1
 
 .PHONY: .bindeps
 .bindeps:
@@ -22,13 +24,19 @@ lint: .bindeps
 .PHONY: .testdata
 .testdata:
 	mkdir -p $(TESTDATA)
+
+	# nestest
 	[ -f $(NESTEST_LOG) ] || curl -sL https://www.qmtpro.com/\~nes/misc/nestest.log --output $(NESTEST_LOG)
 	[ -f $(NESTEST_BIN) ] || curl -sL https://www.qmtpro.com/\~nes/misc/nestest.nes --output $(NESTEST_BIN)
+
+	# SingleStepTests
+	[ -d $(SINGLE_STEP_TESTS) ] || git clone https://github.com/SingleStepTests/65x02.git $(SINGLE_STEP_TESTS_DIR)
 
 .PHONY: test
 test: .testdata
 	NESTEST_BIN=$(NESTEST_BIN) NESTEST_LOG=$(NESTEST_LOG) \
-	go test -v -cover -coverprofile $(TEST_COVER_OUT) ./...
+	SINGLE_STEP_TEST_DIR=$(SINGLE_STEP_TESTS) \
+	go test -v -timeout 5m -cover -coverprofile $(TEST_COVER_OUT) ./...
 
 .PHONY: test-cover
 test-cover: test

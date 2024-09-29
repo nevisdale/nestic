@@ -92,6 +92,7 @@ type CPU struct {
 	operandAddr  uint16
 	operandValue uint8
 	pageCrossed  bool
+	halted       bool
 }
 
 func isSameSign(a, b uint8) bool {
@@ -170,8 +171,9 @@ func (c *CPU) Reset() {
 	c.p = 0x00 | flagU | flagI
 	c.sp = 0xfd
 	c.pc = c.read16(0xfffc)
-	c.cycles = 8
+	c.cycles = 7
 	c.totalCycles = 7
+	c.halted = false
 }
 
 // Interrupt request signal
@@ -182,26 +184,24 @@ func (c *CPU) IRQ() {
 
 	c.stackPush16(c.pc)
 	c.setFlag(flagB, false)
-	c.setFlag(flagU, true)
-	c.setFlag(flagI, true)
+	c.setFlag(flagU|flagI, true)
 	c.stackPush8(c.p)
 	c.pc = c.read16(0xfffe)
-	c.cycles = 7
+	c.cycles += 7
 }
 
 // Non-maskable interrupt request signal
 func (c *CPU) NMI() {
 	c.stackPush16(c.pc)
 	c.setFlag(flagB, false)
-	c.setFlag(flagU, true)
-	c.setFlag(flagI, true)
+	c.setFlag(flagU|flagI, true)
 	c.stackPush8(c.p)
 	c.pc = c.read16(0xfffa)
-	c.cycles = 8
+	c.cycles += 7
 }
 
 // Disassemble returns a map of addresses and their corresponding instructions
-// from 0x0000 to 0xFFFF
+// from 0x0000 to 0xffff
 func (c *CPU) Disassemble() map[uint16]string {
 	disasm := make(map[uint16]string, 0x10000)
 
@@ -263,7 +263,7 @@ func (c *CPU) Disassemble() map[uint16]string {
 			operand := uint16(c.read8(pc))
 			pc++
 			if operand&0x80 > 0 {
-				operand |= 0xFF00 // add leading 1 s to save the sign
+				operand |= 0xff00 // add leading 1 s to save the sign
 			}
 			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%02X {%s}", addr, instr.name, pc+operand, instr.mode)
 			skip = 1
@@ -282,6 +282,10 @@ func (c *CPU) Disassemble() map[uint16]string {
 // Tic executes one CPU cycle and
 // returns the number of cycles left for the current operation
 func (c *CPU) Tic() uint8 {
+	if c.halted {
+		return 0
+	}
+
 	if c.cycles > 0 {
 		c.cycles--
 		return c.cycles
@@ -295,7 +299,7 @@ func (c *CPU) Tic() uint8 {
 		log.Printf("unsupported opcode %02X. PC: %04X. halting...\n", opcode, c.pc)
 		return 0
 	}
-	c.fetch(instr.mode)
+	_ = c.fetch(instr.mode)
 	instr.fn()
 	c.cycles += instr.cycles
 	c.totalCycles += uint64(c.cycles)
@@ -307,7 +311,9 @@ func (c *CPU) Tic() uint8 {
 	return c.cycles
 }
 
-func (c *CPU) fetch(addrMode addrMode) {
+// fetch fetches the operand for the current instruction
+// and returns the number of bytes read
+func (c *CPU) fetch(addrMode addrMode) (n int) {
 	c.addrMode = addrMode
 	c.pageCrossed = false
 	c.operandAddr = 0
@@ -318,31 +324,31 @@ func (c *CPU) fetch(addrMode addrMode) {
 		c.operandAddr = c.pc
 		c.pc++
 		c.operandValue = c.read8(c.operandAddr)
-		return
+		return 1
 
 	case addrModeZP:
 		c.operandAddr = uint16(c.read8(c.pc))
 		c.pc++
 		c.operandValue = c.read8(c.operandAddr)
-		return
+		return 1
 
 	case addrModeZPX:
 		c.operandAddr = uint16(c.read8(c.pc) + c.x)
 		c.pc++
 		c.operandValue = c.read8(c.operandAddr)
-		return
+		return 1
 
 	case addrModeZPY:
 		c.operandAddr = uint16(c.read8(c.pc) + c.y)
 		c.pc++
 		c.operandValue = c.read8(c.operandAddr)
-		return
+		return 1
 
 	case addrModeABS:
 		c.operandAddr = c.read16(c.pc)
 		c.pc += 2
 		c.operandValue = c.read8(c.operandAddr)
-		return
+		return 2
 
 	case addrModeABSX:
 		baseAddr := c.read16(c.pc)
@@ -350,7 +356,7 @@ func (c *CPU) fetch(addrMode addrMode) {
 		c.operandAddr = baseAddr + uint16(c.x)
 		c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = isDiffPage(baseAddr, c.operandAddr)
-		return
+		return 2
 
 	case addrModeABSY:
 		baseAddr := c.read16(c.pc)
@@ -358,7 +364,7 @@ func (c *CPU) fetch(addrMode addrMode) {
 		c.operandAddr = baseAddr + uint16(c.y)
 		c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = isDiffPage(baseAddr, c.operandAddr)
-		return
+		return 2
 
 	case addrModeIND:
 		addr := c.read16(c.pc)
@@ -371,16 +377,17 @@ func (c *CPU) fetch(addrMode addrMode) {
 		}
 		c.operandAddr = uint16(c.read8(lo)) | uint16(c.read8(hi))<<8
 		c.operandValue = c.read8(c.operandAddr)
-		return
+		return 2
 
 	case addrModeINDX:
-		addr := uint16(c.read8(c.pc) + c.x)
+		addr := uint16(c.read8(c.pc))
+		addr = addr + uint16(c.x)
 		c.pc++
 		lo := uint16(c.read8(addr & 0x00ff))
 		hi := uint16(c.read8((addr + 1) & 0x00ff))
 		c.operandAddr = lo | hi<<8
 		c.operandValue = c.read8(c.operandAddr)
-		return
+		return 1
 
 	case addrModeINDY:
 		addr := uint16(c.read8(c.pc))
@@ -391,26 +398,27 @@ func (c *CPU) fetch(addrMode addrMode) {
 		c.operandAddr = addr + uint16(c.y)
 		c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = isDiffPage(addr, c.operandAddr)
-		return
+		return 1
 
 	case addrModeREL:
 		c.operandAddr = uint16(c.read8(c.pc))
 		c.pc++
 		if c.operandAddr&0x80 > 0 {
-			c.operandAddr |= 0xFF00 // add leading 1 s to save the sign
+			c.operandAddr |= 0xff00 // add leading 1 s to save the sign
 		}
-		return
+		return 1
 
 	case addrModeACC:
 		c.operandValue = c.a
-		return
+		return 0
 
 	case addrModeIMP:
-		return
+		return 0
 	}
 
 	c.hlt()
 	log.Printf("unsupported addressing mode %d. PC: %04X. halting...\n", addrMode, c.pc)
+	return 0
 }
 
 func (c *CPU) adc() {
@@ -823,7 +831,7 @@ func (c *CPU) rra() {
 }
 
 func (c *CPU) hlt() {
-	// do nothing
+	c.halted = true
 }
 
 func (c *CPU) anc() {
@@ -850,12 +858,6 @@ func (c *CPU) las() {
 	}
 }
 
-func (c *CPU) axs() {
-	c.x = c.a&c.x - c.operandValue
-	c.setFlag(flagC, c.x >= c.operandValue)
-	c.setFlagsZN(c.x - c.operandValue)
-}
-
 func (c *CPU) initInstructions() {
 	c.instrs[0x00] = instr{name: "BRK", mode: addrModeIMP, fn: c.brk, cycles: 7}
 	c.instrs[0x01] = instr{name: "ORA", mode: addrModeINDX, fn: c.ora, cycles: 6}
@@ -867,12 +869,12 @@ func (c *CPU) initInstructions() {
 	c.instrs[0x07] = instr{name: "SLO", mode: addrModeZP, fn: c.slo, cycles: 5}
 	c.instrs[0x08] = instr{name: "PHP", mode: addrModeIMP, fn: c.php, cycles: 3}
 	c.instrs[0x09] = instr{name: "ORA", mode: addrModeIMM, fn: c.ora, cycles: 2}
-	c.instrs[0x0A] = instr{name: "ASL", mode: addrModeACC, fn: c.asl, cycles: 2}
-	c.instrs[0x0B] = instr{name: "ANC", mode: addrModeIMM, fn: c.anc, cycles: 2}
-	c.instrs[0x0C] = instr{name: "NOP", mode: addrModeABS, fn: c.nop, cycles: 4}
-	c.instrs[0x0D] = instr{name: "ORA", mode: addrModeABS, fn: c.ora, cycles: 4}
-	c.instrs[0x0E] = instr{name: "ASL", mode: addrModeABS, fn: c.asl, cycles: 6}
-	c.instrs[0x0F] = instr{name: "SLO", mode: addrModeABS, fn: c.slo, cycles: 6}
+	c.instrs[0x0a] = instr{name: "ASL", mode: addrModeACC, fn: c.asl, cycles: 2}
+	c.instrs[0x0b] = instr{name: "ANC", mode: addrModeIMM, fn: c.anc, cycles: 2}
+	c.instrs[0x0c] = instr{name: "NOP", mode: addrModeABS, fn: c.nop, cycles: 4}
+	c.instrs[0x0d] = instr{name: "ORA", mode: addrModeABS, fn: c.ora, cycles: 4}
+	c.instrs[0x0e] = instr{name: "ASL", mode: addrModeABS, fn: c.asl, cycles: 6}
+	c.instrs[0x0f] = instr{name: "SLO", mode: addrModeABS, fn: c.slo, cycles: 6}
 	c.instrs[0x10] = instr{name: "BPL", mode: addrModeREL, fn: c.bpl, cycles: 2}
 	c.instrs[0x11] = instr{name: "ORA", mode: addrModeINDY, fn: c.ora, cycles: 5}
 	c.instrs[0x12] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
@@ -883,12 +885,12 @@ func (c *CPU) initInstructions() {
 	c.instrs[0x17] = instr{name: "SLO", mode: addrModeZPX, fn: c.slo, cycles: 6}
 	c.instrs[0x18] = instr{name: "CLC", mode: addrModeIMP, fn: c.clc, cycles: 2}
 	c.instrs[0x19] = instr{name: "ORA", mode: addrModeABSY, fn: c.ora, cycles: 4}
-	c.instrs[0x1A] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
-	c.instrs[0x1B] = instr{name: "SLO", mode: addrModeABSY, fn: c.slo, cycles: 7}
-	c.instrs[0x1C] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
-	c.instrs[0x1D] = instr{name: "ORA", mode: addrModeABSX, fn: c.ora, cycles: 4}
-	c.instrs[0x1E] = instr{name: "ASL", mode: addrModeABSX, fn: c.asl, cycles: 7}
-	c.instrs[0x1F] = instr{name: "SLO", mode: addrModeABSX, fn: c.slo, cycles: 7}
+	c.instrs[0x1a] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0x1b] = instr{name: "SLO", mode: addrModeABSY, fn: c.slo, cycles: 7}
+	c.instrs[0x1c] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0x1d] = instr{name: "ORA", mode: addrModeABSX, fn: c.ora, cycles: 4}
+	c.instrs[0x1e] = instr{name: "ASL", mode: addrModeABSX, fn: c.asl, cycles: 7}
+	c.instrs[0x1f] = instr{name: "SLO", mode: addrModeABSX, fn: c.slo, cycles: 7}
 	c.instrs[0x20] = instr{name: "JSR", mode: addrModeABS, fn: c.jsr, cycles: 6}
 	c.instrs[0x21] = instr{name: "AND", mode: addrModeINDX, fn: c.and, cycles: 6}
 	c.instrs[0x22] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
@@ -899,12 +901,12 @@ func (c *CPU) initInstructions() {
 	c.instrs[0x27] = instr{name: "RLA", mode: addrModeZP, fn: c.rla, cycles: 5}
 	c.instrs[0x28] = instr{name: "PLP", mode: addrModeIMP, fn: c.plp, cycles: 4}
 	c.instrs[0x29] = instr{name: "AND", mode: addrModeIMM, fn: c.and, cycles: 2}
-	c.instrs[0x2A] = instr{name: "ROL", mode: addrModeACC, fn: c.rol, cycles: 2}
-	c.instrs[0x2B] = instr{name: "ANC", mode: addrModeIMM, fn: c.anc, cycles: 2}
-	c.instrs[0x2C] = instr{name: "BIT", mode: addrModeABS, fn: c.bit, cycles: 4}
-	c.instrs[0x2D] = instr{name: "AND", mode: addrModeABS, fn: c.and, cycles: 4}
-	c.instrs[0x2E] = instr{name: "ROL", mode: addrModeABS, fn: c.rol, cycles: 6}
-	c.instrs[0x2F] = instr{name: "RLA", mode: addrModeABS, fn: c.rla, cycles: 6}
+	c.instrs[0x2a] = instr{name: "ROL", mode: addrModeACC, fn: c.rol, cycles: 2}
+	c.instrs[0x2b] = instr{name: "ANC", mode: addrModeIMM, fn: c.anc, cycles: 2}
+	c.instrs[0x2c] = instr{name: "BIT", mode: addrModeABS, fn: c.bit, cycles: 4}
+	c.instrs[0x2d] = instr{name: "AND", mode: addrModeABS, fn: c.and, cycles: 4}
+	c.instrs[0x2e] = instr{name: "ROL", mode: addrModeABS, fn: c.rol, cycles: 6}
+	c.instrs[0x2f] = instr{name: "RLA", mode: addrModeABS, fn: c.rla, cycles: 6}
 	c.instrs[0x30] = instr{name: "BMI", mode: addrModeREL, fn: c.bmi, cycles: 2}
 	c.instrs[0x31] = instr{name: "AND", mode: addrModeINDY, fn: c.and, cycles: 5}
 	c.instrs[0x32] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
@@ -915,12 +917,12 @@ func (c *CPU) initInstructions() {
 	c.instrs[0x37] = instr{name: "RLA", mode: addrModeZPX, fn: c.rla, cycles: 6}
 	c.instrs[0x38] = instr{name: "SEC", mode: addrModeIMP, fn: c.sec, cycles: 2}
 	c.instrs[0x39] = instr{name: "AND", mode: addrModeABSY, fn: c.and, cycles: 4}
-	c.instrs[0x3A] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
-	c.instrs[0x3B] = instr{name: "RLA", mode: addrModeABSY, fn: c.rla, cycles: 7}
-	c.instrs[0x3C] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
-	c.instrs[0x3D] = instr{name: "AND", mode: addrModeABSX, fn: c.and, cycles: 4}
-	c.instrs[0x3E] = instr{name: "ROL", mode: addrModeABSX, fn: c.rol, cycles: 7}
-	c.instrs[0x3F] = instr{name: "RLA", mode: addrModeABSX, fn: c.rla, cycles: 7}
+	c.instrs[0x3a] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0x3b] = instr{name: "RLA", mode: addrModeABSY, fn: c.rla, cycles: 7}
+	c.instrs[0x3c] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0x3d] = instr{name: "AND", mode: addrModeABSX, fn: c.and, cycles: 4}
+	c.instrs[0x3e] = instr{name: "ROL", mode: addrModeABSX, fn: c.rol, cycles: 7}
+	c.instrs[0x3f] = instr{name: "RLA", mode: addrModeABSX, fn: c.rla, cycles: 7}
 	c.instrs[0x40] = instr{name: "RTI", mode: addrModeIMP, fn: c.rti, cycles: 6}
 	c.instrs[0x41] = instr{name: "EOR", mode: addrModeINDX, fn: c.eor, cycles: 6}
 	c.instrs[0x42] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
@@ -931,12 +933,12 @@ func (c *CPU) initInstructions() {
 	c.instrs[0x47] = instr{name: "SRE", mode: addrModeZP, fn: c.sre, cycles: 5}
 	c.instrs[0x48] = instr{name: "PHA", mode: addrModeIMP, fn: c.pha, cycles: 3}
 	c.instrs[0x49] = instr{name: "EOR", mode: addrModeIMM, fn: c.eor, cycles: 2}
-	c.instrs[0x4A] = instr{name: "LSR", mode: addrModeACC, fn: c.lsr, cycles: 2}
-	c.instrs[0x4B] = instr{name: "ALR", mode: addrModeIMM, fn: c.alr, cycles: 2}
-	c.instrs[0x4C] = instr{name: "JMP", mode: addrModeABS, fn: c.jmp, cycles: 3}
-	c.instrs[0x4D] = instr{name: "EOR", mode: addrModeABS, fn: c.eor, cycles: 4}
-	c.instrs[0x4E] = instr{name: "LSR", mode: addrModeABS, fn: c.lsr, cycles: 6}
-	c.instrs[0x4F] = instr{name: "SRE", mode: addrModeABS, fn: c.sre, cycles: 6}
+	c.instrs[0x4a] = instr{name: "LSR", mode: addrModeACC, fn: c.lsr, cycles: 2}
+	c.instrs[0x4b] = instr{name: "ALR", mode: addrModeIMM, fn: c.alr, cycles: 2}
+	c.instrs[0x4c] = instr{name: "JMP", mode: addrModeABS, fn: c.jmp, cycles: 3}
+	c.instrs[0x4d] = instr{name: "EOR", mode: addrModeABS, fn: c.eor, cycles: 4}
+	c.instrs[0x4e] = instr{name: "LSR", mode: addrModeABS, fn: c.lsr, cycles: 6}
+	c.instrs[0x4f] = instr{name: "SRE", mode: addrModeABS, fn: c.sre, cycles: 6}
 	c.instrs[0x50] = instr{name: "BVC", mode: addrModeREL, fn: c.bvc, cycles: 2}
 	c.instrs[0x51] = instr{name: "EOR", mode: addrModeINDY, fn: c.eor, cycles: 5}
 	c.instrs[0x52] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
@@ -947,12 +949,12 @@ func (c *CPU) initInstructions() {
 	c.instrs[0x57] = instr{name: "SRE", mode: addrModeZPX, fn: c.sre, cycles: 6}
 	c.instrs[0x58] = instr{name: "CLI", mode: addrModeIMP, fn: c.cli, cycles: 2}
 	c.instrs[0x59] = instr{name: "EOR", mode: addrModeABSY, fn: c.eor, cycles: 4}
-	c.instrs[0x5A] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
-	c.instrs[0x5B] = instr{name: "SRE", mode: addrModeABSY, fn: c.sre, cycles: 7}
-	c.instrs[0x5C] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
-	c.instrs[0x5D] = instr{name: "EOR", mode: addrModeABSX, fn: c.eor, cycles: 4}
-	c.instrs[0x5E] = instr{name: "LSR", mode: addrModeABSX, fn: c.lsr, cycles: 7}
-	c.instrs[0x5F] = instr{name: "SRE", mode: addrModeABSX, fn: c.sre, cycles: 7}
+	c.instrs[0x5a] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0x5b] = instr{name: "SRE", mode: addrModeABSY, fn: c.sre, cycles: 7}
+	c.instrs[0x5c] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0x5d] = instr{name: "EOR", mode: addrModeABSX, fn: c.eor, cycles: 4}
+	c.instrs[0x5e] = instr{name: "LSR", mode: addrModeABSX, fn: c.lsr, cycles: 7}
+	c.instrs[0x5f] = instr{name: "SRE", mode: addrModeABSX, fn: c.sre, cycles: 7}
 	c.instrs[0x60] = instr{name: "RTS", mode: addrModeIMP, fn: c.rts, cycles: 6}
 	c.instrs[0x61] = instr{name: "ADC", mode: addrModeINDX, fn: c.adc, cycles: 6}
 	c.instrs[0x62] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
@@ -963,11 +965,11 @@ func (c *CPU) initInstructions() {
 	c.instrs[0x67] = instr{name: "RRA", mode: addrModeZP, fn: c.rra, cycles: 5}
 	c.instrs[0x68] = instr{name: "PLA", mode: addrModeIMP, fn: c.pla, cycles: 4}
 	c.instrs[0x69] = instr{name: "ADC", mode: addrModeIMM, fn: c.adc, cycles: 2}
-	c.instrs[0x6A] = instr{name: "ROR", mode: addrModeACC, fn: c.ror, cycles: 2}
-	c.instrs[0x6C] = instr{name: "JMP", mode: addrModeIND, fn: c.jmp, cycles: 5}
-	c.instrs[0x6D] = instr{name: "ADC", mode: addrModeABS, fn: c.adc, cycles: 4}
-	c.instrs[0x6E] = instr{name: "ROR", mode: addrModeABS, fn: c.ror, cycles: 6}
-	c.instrs[0x6F] = instr{name: "RRA", mode: addrModeABS, fn: c.rra, cycles: 6}
+	c.instrs[0x6a] = instr{name: "ROR", mode: addrModeACC, fn: c.ror, cycles: 2}
+	c.instrs[0x6c] = instr{name: "JMP", mode: addrModeIND, fn: c.jmp, cycles: 5}
+	c.instrs[0x6d] = instr{name: "ADC", mode: addrModeABS, fn: c.adc, cycles: 4}
+	c.instrs[0x6e] = instr{name: "ROR", mode: addrModeABS, fn: c.ror, cycles: 6}
+	c.instrs[0x6f] = instr{name: "RRA", mode: addrModeABS, fn: c.rra, cycles: 6}
 	c.instrs[0x70] = instr{name: "BVS", mode: addrModeREL, fn: c.bvs, cycles: 2}
 	c.instrs[0x71] = instr{name: "ADC", mode: addrModeINDY, fn: c.adc, cycles: 5}
 	c.instrs[0x72] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
@@ -978,12 +980,12 @@ func (c *CPU) initInstructions() {
 	c.instrs[0x77] = instr{name: "RRA", mode: addrModeZPX, fn: c.rra, cycles: 6}
 	c.instrs[0x78] = instr{name: "SEI", mode: addrModeIMP, fn: c.sei, cycles: 2}
 	c.instrs[0x79] = instr{name: "ADC", mode: addrModeABSY, fn: c.adc, cycles: 4}
-	c.instrs[0x7A] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
-	c.instrs[0x7B] = instr{name: "RRA", mode: addrModeABSY, fn: c.rra, cycles: 7}
-	c.instrs[0x7C] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
-	c.instrs[0x7D] = instr{name: "ADC", mode: addrModeABSX, fn: c.adc, cycles: 4}
-	c.instrs[0x7E] = instr{name: "ROR", mode: addrModeABSX, fn: c.ror, cycles: 7}
-	c.instrs[0x7F] = instr{name: "RRA", mode: addrModeABSX, fn: c.rra, cycles: 7}
+	c.instrs[0x7a] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0x7b] = instr{name: "RRA", mode: addrModeABSY, fn: c.rra, cycles: 7}
+	c.instrs[0x7c] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0x7d] = instr{name: "ADC", mode: addrModeABSX, fn: c.adc, cycles: 4}
+	c.instrs[0x7e] = instr{name: "ROR", mode: addrModeABSX, fn: c.ror, cycles: 7}
+	c.instrs[0x7f] = instr{name: "RRA", mode: addrModeABSX, fn: c.rra, cycles: 7}
 	c.instrs[0x80] = instr{name: "NOP", mode: addrModeREL, fn: c.nop, cycles: 2}
 	c.instrs[0x81] = instr{name: "STA", mode: addrModeINDX, fn: c.sta, cycles: 6}
 	c.instrs[0x82] = instr{name: "NOP", mode: addrModeIMM, fn: c.nop, cycles: 2}
@@ -994,11 +996,11 @@ func (c *CPU) initInstructions() {
 	c.instrs[0x87] = instr{name: "SAX", mode: addrModeZP, fn: c.sax, cycles: 3}
 	c.instrs[0x88] = instr{name: "DEY", mode: addrModeIMP, fn: c.dey, cycles: 2}
 	c.instrs[0x89] = instr{name: "NOP", mode: addrModeIMM, fn: c.nop, cycles: 2}
-	c.instrs[0x8A] = instr{name: "TXA", mode: addrModeIMP, fn: c.txa, cycles: 2}
-	c.instrs[0x8C] = instr{name: "STY", mode: addrModeABS, fn: c.sty, cycles: 4}
-	c.instrs[0x8D] = instr{name: "STA", mode: addrModeABS, fn: c.sta, cycles: 4}
-	c.instrs[0x8E] = instr{name: "STX", mode: addrModeABS, fn: c.stx, cycles: 4}
-	c.instrs[0x8F] = instr{name: "SAX", mode: addrModeABS, fn: c.sax, cycles: 4}
+	c.instrs[0x8a] = instr{name: "TXA", mode: addrModeIMP, fn: c.txa, cycles: 2}
+	c.instrs[0x8c] = instr{name: "STY", mode: addrModeABS, fn: c.sty, cycles: 4}
+	c.instrs[0x8d] = instr{name: "STA", mode: addrModeABS, fn: c.sta, cycles: 4}
+	c.instrs[0x8e] = instr{name: "STX", mode: addrModeABS, fn: c.stx, cycles: 4}
+	c.instrs[0x8f] = instr{name: "SAX", mode: addrModeABS, fn: c.sax, cycles: 4}
 	c.instrs[0x90] = instr{name: "BCC", mode: addrModeREL, fn: c.bcc, cycles: 2}
 	c.instrs[0x91] = instr{name: "STA", mode: addrModeINDY, fn: c.sta, cycles: 6}
 	c.instrs[0x92] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
@@ -1008,101 +1010,105 @@ func (c *CPU) initInstructions() {
 	c.instrs[0x97] = instr{name: "SAX", mode: addrModeZPY, fn: c.sax, cycles: 4}
 	c.instrs[0x98] = instr{name: "TYA", mode: addrModeIMP, fn: c.tya, cycles: 2}
 	c.instrs[0x99] = instr{name: "STA", mode: addrModeABSY, fn: c.sta, cycles: 5}
-	c.instrs[0x9A] = instr{name: "TXS", mode: addrModeIMP, fn: c.txs, cycles: 2}
-	c.instrs[0x9D] = instr{name: "STA", mode: addrModeABSX, fn: c.sta, cycles: 5}
-	c.instrs[0xA0] = instr{name: "LDY", mode: addrModeIMM, fn: c.ldy, cycles: 2}
-	c.instrs[0xA1] = instr{name: "LDA", mode: addrModeINDX, fn: c.lda, cycles: 6}
-	c.instrs[0xA2] = instr{name: "LDX", mode: addrModeIMM, fn: c.ldx, cycles: 2}
-	c.instrs[0xA3] = instr{name: "LAX", mode: addrModeINDX, fn: c.lax, cycles: 6}
-	c.instrs[0xA4] = instr{name: "LDY", mode: addrModeZP, fn: c.ldy, cycles: 3}
-	c.instrs[0xA5] = instr{name: "LDA", mode: addrModeZP, fn: c.lda, cycles: 3}
-	c.instrs[0xA6] = instr{name: "LDX", mode: addrModeZP, fn: c.ldx, cycles: 3}
-	c.instrs[0xA7] = instr{name: "LAX", mode: addrModeZP, fn: c.lax, cycles: 3}
-	c.instrs[0xA8] = instr{name: "TAY", mode: addrModeIMP, fn: c.tay, cycles: 2}
-	c.instrs[0xA9] = instr{name: "LDA", mode: addrModeIMM, fn: c.lda, cycles: 2}
-	c.instrs[0xAA] = instr{name: "TAX", mode: addrModeIMP, fn: c.tax, cycles: 2}
-	c.instrs[0xAC] = instr{name: "LDY", mode: addrModeABS, fn: c.ldy, cycles: 4}
-	c.instrs[0xAD] = instr{name: "LDA", mode: addrModeABS, fn: c.lda, cycles: 4}
-	c.instrs[0xAE] = instr{name: "LDX", mode: addrModeABS, fn: c.ldx, cycles: 4}
-	c.instrs[0xAF] = instr{name: "LAX", mode: addrModeABS, fn: c.lax, cycles: 4}
-	c.instrs[0xB0] = instr{name: "BCS", mode: addrModeREL, fn: c.bcs, cycles: 2}
-	c.instrs[0xB1] = instr{name: "LDA", mode: addrModeINDY, fn: c.lda, cycles: 5}
-	c.instrs[0xB2] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
-	c.instrs[0xB3] = instr{name: "LAX", mode: addrModeINDY, fn: c.lax, cycles: 5}
-	c.instrs[0xB4] = instr{name: "LDY", mode: addrModeZPX, fn: c.ldy, cycles: 4}
-	c.instrs[0xB5] = instr{name: "LDA", mode: addrModeZPX, fn: c.lda, cycles: 4}
-	c.instrs[0xB6] = instr{name: "LDX", mode: addrModeZPY, fn: c.ldx, cycles: 4}
-	c.instrs[0xB7] = instr{name: "LAX", mode: addrModeZPY, fn: c.lax, cycles: 4}
-	c.instrs[0xB8] = instr{name: "CLV", mode: addrModeIMP, fn: c.clv, cycles: 2}
-	c.instrs[0xB9] = instr{name: "LDA", mode: addrModeABSY, fn: c.lda, cycles: 4}
-	c.instrs[0xBA] = instr{name: "TSX", mode: addrModeIMP, fn: c.tsx, cycles: 2}
-	c.instrs[0xBB] = instr{name: "LAS", mode: addrModeABSY, fn: c.las, cycles: 4}
-	c.instrs[0xBC] = instr{name: "LDY", mode: addrModeABSX, fn: c.ldy, cycles: 4}
-	c.instrs[0xBD] = instr{name: "LDA", mode: addrModeABSX, fn: c.lda, cycles: 4}
-	c.instrs[0xBE] = instr{name: "LDX", mode: addrModeABSY, fn: c.ldx, cycles: 4}
-	c.instrs[0xBF] = instr{name: "LAX", mode: addrModeABSY, fn: c.lax, cycles: 4}
-	c.instrs[0xC0] = instr{name: "CPY", mode: addrModeIMM, fn: c.cpy, cycles: 2}
-	c.instrs[0xC1] = instr{name: "CMP", mode: addrModeINDX, fn: c.cmp, cycles: 6}
-	c.instrs[0xC2] = instr{name: "NOP", mode: addrModeIMM, fn: c.nop, cycles: 2}
-	c.instrs[0xC3] = instr{name: "DCP", mode: addrModeINDX, fn: c.dcp, cycles: 8}
-	c.instrs[0xC4] = instr{name: "CPY", mode: addrModeZP, fn: c.cpy, cycles: 3}
-	c.instrs[0xC5] = instr{name: "CMP", mode: addrModeZP, fn: c.cmp, cycles: 3}
-	c.instrs[0xC6] = instr{name: "DEC", mode: addrModeZP, fn: c.dec, cycles: 5}
-	c.instrs[0xC7] = instr{name: "DCP", mode: addrModeZP, fn: c.dcp, cycles: 5}
-	c.instrs[0xC8] = instr{name: "INY", mode: addrModeIMP, fn: c.iny, cycles: 2}
-	c.instrs[0xC9] = instr{name: "CMP", mode: addrModeIMM, fn: c.cmp, cycles: 2}
-	c.instrs[0xCA] = instr{name: "DEX", mode: addrModeIMP, fn: c.dex, cycles: 2}
-	c.instrs[0xCB] = instr{name: "AXS", mode: addrModeIMM, fn: c.axs, cycles: 2}
-	c.instrs[0xCC] = instr{name: "CPY", mode: addrModeABS, fn: c.cpy, cycles: 4}
-	c.instrs[0xCD] = instr{name: "CMP", mode: addrModeABS, fn: c.cmp, cycles: 4}
-	c.instrs[0xCE] = instr{name: "DEC", mode: addrModeABS, fn: c.dec, cycles: 6}
-	c.instrs[0xCF] = instr{name: "DCP", mode: addrModeABS, fn: c.dcp, cycles: 6}
-	c.instrs[0xD0] = instr{name: "BNE", mode: addrModeREL, fn: c.bne, cycles: 2}
-	c.instrs[0xD1] = instr{name: "CMP", mode: addrModeINDY, fn: c.cmp, cycles: 5}
-	c.instrs[0xD2] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
-	c.instrs[0xD3] = instr{name: "DCP", mode: addrModeINDY, fn: c.dcp, cycles: 8}
-	c.instrs[0xD4] = instr{name: "NOP", mode: addrModeZPX, fn: c.nop, cycles: 4}
-	c.instrs[0xD5] = instr{name: "CMP", mode: addrModeZPX, fn: c.cmp, cycles: 4}
-	c.instrs[0xD6] = instr{name: "DEC", mode: addrModeZPX, fn: c.dec, cycles: 6}
-	c.instrs[0xD7] = instr{name: "DCP", mode: addrModeZPX, fn: c.dcp, cycles: 6}
-	c.instrs[0xD8] = instr{name: "CLD", mode: addrModeIMP, fn: c.cld, cycles: 2}
-	c.instrs[0xD9] = instr{name: "CMP", mode: addrModeABSY, fn: c.cmp, cycles: 4}
-	c.instrs[0xDA] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
-	c.instrs[0xDB] = instr{name: "DCP", mode: addrModeABSY, fn: c.dcp, cycles: 7}
-	c.instrs[0xDC] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
-	c.instrs[0xDD] = instr{name: "CMP", mode: addrModeABSX, fn: c.cmp, cycles: 4}
-	c.instrs[0xDE] = instr{name: "DEC", mode: addrModeABSX, fn: c.dec, cycles: 7}
-	c.instrs[0xDF] = instr{name: "DCP", mode: addrModeABSX, fn: c.dcp, cycles: 7}
-	c.instrs[0xE0] = instr{name: "CPX", mode: addrModeIMM, fn: c.cpx, cycles: 2}
-	c.instrs[0xE1] = instr{name: "SBC", mode: addrModeINDX, fn: c.sbc, cycles: 6}
-	c.instrs[0xE2] = instr{name: "NOP", mode: addrModeIMM, fn: c.nop, cycles: 2}
-	c.instrs[0xE3] = instr{name: "ISC", mode: addrModeINDX, fn: c.isc, cycles: 8}
-	c.instrs[0xE4] = instr{name: "CPX", mode: addrModeZP, fn: c.cpx, cycles: 3}
-	c.instrs[0xE5] = instr{name: "SBC", mode: addrModeZP, fn: c.sbc, cycles: 3}
-	c.instrs[0xE6] = instr{name: "INC", mode: addrModeZP, fn: c.inc, cycles: 5}
-	c.instrs[0xE7] = instr{name: "ISC", mode: addrModeZP, fn: c.isc, cycles: 5}
-	c.instrs[0xE8] = instr{name: "INX", mode: addrModeIMP, fn: c.inx, cycles: 2}
-	c.instrs[0xE9] = instr{name: "SBC", mode: addrModeIMM, fn: c.sbc, cycles: 2}
-	c.instrs[0xEA] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
-	c.instrs[0xEB] = instr{name: "SBC", mode: addrModeIMM, fn: c.sbc, cycles: 2}
-	c.instrs[0xEC] = instr{name: "CPX", mode: addrModeABS, fn: c.cpx, cycles: 4}
-	c.instrs[0xED] = instr{name: "SBC", mode: addrModeABS, fn: c.sbc, cycles: 4}
-	c.instrs[0xEE] = instr{name: "INC", mode: addrModeABS, fn: c.inc, cycles: 6}
-	c.instrs[0xEF] = instr{name: "ISC", mode: addrModeABS, fn: c.isc, cycles: 6}
-	c.instrs[0xF0] = instr{name: "BEQ", mode: addrModeREL, fn: c.beq, cycles: 2}
-	c.instrs[0xF1] = instr{name: "SBC", mode: addrModeINDY, fn: c.sbc, cycles: 5}
-	c.instrs[0xF2] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
-	c.instrs[0xF3] = instr{name: "ISC", mode: addrModeINDY, fn: c.isc, cycles: 8}
-	c.instrs[0xF4] = instr{name: "NOP", mode: addrModeZPX, fn: c.nop, cycles: 4}
-	c.instrs[0xF5] = instr{name: "SBC", mode: addrModeZPX, fn: c.sbc, cycles: 4}
-	c.instrs[0xF6] = instr{name: "INC", mode: addrModeZPX, fn: c.inc, cycles: 6}
-	c.instrs[0xF7] = instr{name: "ISC", mode: addrModeZPX, fn: c.isc, cycles: 6}
-	c.instrs[0xF8] = instr{name: "SED", mode: addrModeIMP, fn: c.sed, cycles: 2}
-	c.instrs[0xF9] = instr{name: "SBC", mode: addrModeABSY, fn: c.sbc, cycles: 4}
-	c.instrs[0xFA] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
-	c.instrs[0xFB] = instr{name: "ISC", mode: addrModeABSY, fn: c.isc, cycles: 7}
-	c.instrs[0xFC] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
-	c.instrs[0xFD] = instr{name: "SBC", mode: addrModeABSX, fn: c.sbc, cycles: 4}
-	c.instrs[0xFE] = instr{name: "INC", mode: addrModeABSX, fn: c.inc, cycles: 7}
-	c.instrs[0xFF] = instr{name: "ISC", mode: addrModeABSX, fn: c.isc, cycles: 7}
+	c.instrs[0x9a] = instr{name: "TXS", mode: addrModeIMP, fn: c.txs, cycles: 2}
+	c.instrs[0x9d] = instr{name: "STA", mode: addrModeABSX, fn: c.sta, cycles: 5}
+	c.instrs[0xa0] = instr{name: "LDY", mode: addrModeIMM, fn: c.ldy, cycles: 2}
+	c.instrs[0xa1] = instr{name: "LDA", mode: addrModeINDX, fn: c.lda, cycles: 6}
+	c.instrs[0xa2] = instr{name: "LDX", mode: addrModeIMM, fn: c.ldx, cycles: 2}
+	c.instrs[0xa3] = instr{name: "LAX", mode: addrModeINDX, fn: c.lax, cycles: 6}
+	c.instrs[0xa4] = instr{name: "LDY", mode: addrModeZP, fn: c.ldy, cycles: 3}
+	c.instrs[0xa5] = instr{name: "LDA", mode: addrModeZP, fn: c.lda, cycles: 3}
+	c.instrs[0xa6] = instr{name: "LDX", mode: addrModeZP, fn: c.ldx, cycles: 3}
+	c.instrs[0xa7] = instr{name: "LAX", mode: addrModeZP, fn: c.lax, cycles: 3}
+	c.instrs[0xa8] = instr{name: "TAY", mode: addrModeIMP, fn: c.tay, cycles: 2}
+	c.instrs[0xa9] = instr{name: "LDA", mode: addrModeIMM, fn: c.lda, cycles: 2}
+	c.instrs[0xaa] = instr{name: "TAX", mode: addrModeIMP, fn: c.tax, cycles: 2}
+	c.instrs[0xac] = instr{name: "LDY", mode: addrModeABS, fn: c.ldy, cycles: 4}
+	c.instrs[0xad] = instr{name: "LDA", mode: addrModeABS, fn: c.lda, cycles: 4}
+	c.instrs[0xae] = instr{name: "LDX", mode: addrModeABS, fn: c.ldx, cycles: 4}
+	c.instrs[0xaf] = instr{name: "LAX", mode: addrModeABS, fn: c.lax, cycles: 4}
+	c.instrs[0xb0] = instr{name: "BCS", mode: addrModeREL, fn: c.bcs, cycles: 2}
+	c.instrs[0xb1] = instr{name: "LDA", mode: addrModeINDY, fn: c.lda, cycles: 5}
+	c.instrs[0xb2] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0xb3] = instr{name: "LAX", mode: addrModeINDY, fn: c.lax, cycles: 5}
+	c.instrs[0xb4] = instr{name: "LDY", mode: addrModeZPX, fn: c.ldy, cycles: 4}
+	c.instrs[0xb5] = instr{name: "LDA", mode: addrModeZPX, fn: c.lda, cycles: 4}
+	c.instrs[0xb6] = instr{name: "LDX", mode: addrModeZPY, fn: c.ldx, cycles: 4}
+	c.instrs[0xb7] = instr{name: "LAX", mode: addrModeZPY, fn: c.lax, cycles: 4}
+	c.instrs[0xb8] = instr{name: "CLV", mode: addrModeIMP, fn: c.clv, cycles: 2}
+	c.instrs[0xb9] = instr{name: "LDA", mode: addrModeABSY, fn: c.lda, cycles: 4}
+	c.instrs[0xba] = instr{name: "TSX", mode: addrModeIMP, fn: c.tsx, cycles: 2}
+	c.instrs[0xbb] = instr{name: "LAS", mode: addrModeABSY, fn: c.las, cycles: 4}
+	c.instrs[0xbc] = instr{name: "LDY", mode: addrModeABSX, fn: c.ldy, cycles: 4}
+	c.instrs[0xbd] = instr{name: "LDA", mode: addrModeABSX, fn: c.lda, cycles: 4}
+	c.instrs[0xbe] = instr{name: "LDX", mode: addrModeABSY, fn: c.ldx, cycles: 4}
+	c.instrs[0xbf] = instr{name: "LAX", mode: addrModeABSY, fn: c.lax, cycles: 4}
+	c.instrs[0xc0] = instr{name: "CPY", mode: addrModeIMM, fn: c.cpy, cycles: 2}
+	c.instrs[0xc1] = instr{name: "CMP", mode: addrModeINDX, fn: c.cmp, cycles: 6}
+	c.instrs[0xc2] = instr{name: "NOP", mode: addrModeIMM, fn: c.nop, cycles: 2}
+	c.instrs[0xc3] = instr{name: "DCP", mode: addrModeINDX, fn: c.dcp, cycles: 8}
+	c.instrs[0xc4] = instr{name: "CPY", mode: addrModeZP, fn: c.cpy, cycles: 3}
+	c.instrs[0xc5] = instr{name: "CMP", mode: addrModeZP, fn: c.cmp, cycles: 3}
+	c.instrs[0xc6] = instr{name: "DEC", mode: addrModeZP, fn: c.dec, cycles: 5}
+	c.instrs[0xc7] = instr{name: "DCP", mode: addrModeZP, fn: c.dcp, cycles: 5}
+	c.instrs[0xc8] = instr{name: "INY", mode: addrModeIMP, fn: c.iny, cycles: 2}
+	c.instrs[0xc9] = instr{name: "CMP", mode: addrModeIMM, fn: c.cmp, cycles: 2}
+	c.instrs[0xca] = instr{name: "DEX", mode: addrModeIMP, fn: c.dex, cycles: 2}
+	c.instrs[0xcc] = instr{name: "CPY", mode: addrModeABS, fn: c.cpy, cycles: 4}
+	c.instrs[0xcd] = instr{name: "CMP", mode: addrModeABS, fn: c.cmp, cycles: 4}
+	c.instrs[0xce] = instr{name: "DEC", mode: addrModeABS, fn: c.dec, cycles: 6}
+	c.instrs[0xcf] = instr{name: "DCP", mode: addrModeABS, fn: c.dcp, cycles: 6}
+	c.instrs[0xd0] = instr{name: "BNE", mode: addrModeREL, fn: c.bne, cycles: 2}
+	c.instrs[0xd1] = instr{name: "CMP", mode: addrModeINDY, fn: c.cmp, cycles: 5}
+	c.instrs[0xd2] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0xd3] = instr{name: "DCP", mode: addrModeINDY, fn: c.dcp, cycles: 8}
+	c.instrs[0xd4] = instr{name: "NOP", mode: addrModeZPX, fn: c.nop, cycles: 4}
+	c.instrs[0xd5] = instr{name: "CMP", mode: addrModeZPX, fn: c.cmp, cycles: 4}
+	c.instrs[0xd6] = instr{name: "DEC", mode: addrModeZPX, fn: c.dec, cycles: 6}
+	c.instrs[0xd7] = instr{name: "DCP", mode: addrModeZPX, fn: c.dcp, cycles: 6}
+	c.instrs[0xd8] = instr{name: "CLD", mode: addrModeIMP, fn: c.cld, cycles: 2}
+	c.instrs[0xd9] = instr{name: "CMP", mode: addrModeABSY, fn: c.cmp, cycles: 4}
+	c.instrs[0xda] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0xdb] = instr{name: "DCP", mode: addrModeABSY, fn: c.dcp, cycles: 7}
+	c.instrs[0xdc] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0xdd] = instr{name: "CMP", mode: addrModeABSX, fn: c.cmp, cycles: 4}
+	c.instrs[0xde] = instr{name: "DEC", mode: addrModeABSX, fn: c.dec, cycles: 7}
+	c.instrs[0xdf] = instr{name: "DCP", mode: addrModeABSX, fn: c.dcp, cycles: 7}
+	c.instrs[0xe0] = instr{name: "CPX", mode: addrModeIMM, fn: c.cpx, cycles: 2}
+	c.instrs[0xe1] = instr{name: "SBC", mode: addrModeINDX, fn: c.sbc, cycles: 6}
+	c.instrs[0xe2] = instr{name: "NOP", mode: addrModeIMM, fn: c.nop, cycles: 2}
+	c.instrs[0xe3] = instr{name: "ISC", mode: addrModeINDX, fn: c.isc, cycles: 8}
+	c.instrs[0xe4] = instr{name: "CPX", mode: addrModeZP, fn: c.cpx, cycles: 3}
+	c.instrs[0xe5] = instr{name: "SBC", mode: addrModeZP, fn: c.sbc, cycles: 3}
+	c.instrs[0xe6] = instr{name: "INC", mode: addrModeZP, fn: c.inc, cycles: 5}
+	c.instrs[0xe7] = instr{name: "ISC", mode: addrModeZP, fn: c.isc, cycles: 5}
+	c.instrs[0xe8] = instr{name: "INX", mode: addrModeIMP, fn: c.inx, cycles: 2}
+	c.instrs[0xe9] = instr{name: "SBC", mode: addrModeIMM, fn: c.sbc, cycles: 2}
+	c.instrs[0xea] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0xeb] = instr{name: "SBC", mode: addrModeIMM, fn: c.sbc, cycles: 2}
+	c.instrs[0xec] = instr{name: "CPX", mode: addrModeABS, fn: c.cpx, cycles: 4}
+	c.instrs[0xed] = instr{name: "SBC", mode: addrModeABS, fn: c.sbc, cycles: 4}
+	c.instrs[0xee] = instr{name: "INC", mode: addrModeABS, fn: c.inc, cycles: 6}
+	c.instrs[0xef] = instr{name: "ISC", mode: addrModeABS, fn: c.isc, cycles: 6}
+	c.instrs[0xf0] = instr{name: "BEQ", mode: addrModeREL, fn: c.beq, cycles: 2}
+	c.instrs[0xf1] = instr{name: "SBC", mode: addrModeINDY, fn: c.sbc, cycles: 5}
+	c.instrs[0xf2] = instr{name: "HLT", mode: addrModeIMP, fn: c.hlt, cycles: 0}
+	c.instrs[0xf3] = instr{name: "ISC", mode: addrModeINDY, fn: c.isc, cycles: 8}
+	c.instrs[0xf4] = instr{name: "NOP", mode: addrModeZPX, fn: c.nop, cycles: 4}
+	c.instrs[0xf5] = instr{name: "SBC", mode: addrModeZPX, fn: c.sbc, cycles: 4}
+	c.instrs[0xf6] = instr{name: "INC", mode: addrModeZPX, fn: c.inc, cycles: 6}
+	c.instrs[0xf7] = instr{name: "ISC", mode: addrModeZPX, fn: c.isc, cycles: 6}
+	c.instrs[0xf8] = instr{name: "SED", mode: addrModeIMP, fn: c.sed, cycles: 2}
+	c.instrs[0xf9] = instr{name: "SBC", mode: addrModeABSY, fn: c.sbc, cycles: 4}
+	c.instrs[0xfa] = instr{name: "NOP", mode: addrModeIMP, fn: c.nop, cycles: 2}
+	c.instrs[0xfb] = instr{name: "ISC", mode: addrModeABSY, fn: c.isc, cycles: 7}
+	c.instrs[0xfc] = instr{name: "NOP", mode: addrModeABSX, fn: c.nop, cycles: 4}
+	c.instrs[0xfd] = instr{name: "SBC", mode: addrModeABSX, fn: c.sbc, cycles: 4}
+	c.instrs[0xfe] = instr{name: "INC", mode: addrModeABSX, fn: c.inc, cycles: 7}
+	c.instrs[0xff] = instr{name: "ISC", mode: addrModeABSX, fn: c.isc, cycles: 7}
+}
+
+func opcodeIsSupported(opcode byte) bool {
+	fake := NewCPU(nil)
+	return fake.instrs[opcode].fn != nil
 }
