@@ -3,6 +3,8 @@ package nes
 import (
 	"fmt"
 	"log"
+	"os"
+	"strings"
 )
 
 const (
@@ -202,78 +204,99 @@ func (c *CPU) NMI() {
 
 // Disassemble returns a map of addresses and their corresponding instructions
 // from 0x0000 to 0xffff
+//
+// FIXME: traverse the program is not correct
+// maybe we need to start from the reset vector
+// and look for jmp-behave instructions
+// and disassemble the code from there
 func (c *CPU) Disassemble() map[uint16]string {
+	logf, err := os.Create("disasm.log")
+	if err != nil {
+		log.Fatalf("failed to create disasm.log: %v", err)
+	}
+	defer logf.Close()
+
 	disasm := make(map[uint16]string, 0x10000)
 
-	addr := uint32(0)
-	for addr <= 0xFFFF {
-		pc := uint16(addr)
-		opcode := c.read8(pc)
-		instr := c.instrs[opcode]
+	// this cpu shares the same memory with the bus,
+	// but we dont gonna change the memory content
+	fake := NewCPU(c.mem)
+	fake.Reset()
+
+	addr := uint32(fake.pc)
+	for addr <= 0xffff {
+		fake.pc = uint16(addr)
+		opcode := fake.read8(fake.pc)
+
+		instr := fake.instrs[opcode]
+
 		if instr.fn == nil {
-			disasm[pc] = fmt.Sprintf("$%04X: ???", pc)
+			disasm[uint16(addr)] = fmt.Sprintf("$%04X: ???", addr)
 			addr++
 			continue
 		}
 
-		pc++
-		skip := uint32(0)
+		var line strings.Builder
+		fmt.Fprintf(&line, "$%04X: %s ", fake.pc, instr.name)
+
+		fake.pc++
+		pcBeforeFetch := fake.pc
+		fetchedBytes := fake.fetch(instr.mode)
+
 		switch instr.mode {
 		case addrModeIMM:
-			operand := c.read8(pc)
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s #$%02X {%s}", addr, instr.name, operand, instr.mode)
-			skip = 1
+			fmt.Fprintf(&line, "#$%02X ", fake.operandValue)
 		case addrModeZP:
-			operand := c.read8(pc)
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%02X {%s}", addr, instr.name, operand, instr.mode)
-			skip = 1
+			fmt.Fprintf(&line, "$%02X ", fake.operandAddr)
 		case addrModeZPX:
-			operand := c.read8(pc)
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%02X,X {%s}", addr, instr.name, operand, instr.mode)
-			skip = 1
+			fmt.Fprintf(&line, "$%02X,X ", fake.operandAddr)
 		case addrModeZPY:
-			operand := c.read8(pc)
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%02X,Y {%s}", addr, instr.name, operand, instr.mode)
-			skip = 1
+			fmt.Fprintf(&line, "$%02X,Y ", fake.operandAddr)
 		case addrModeABS:
-			operand := c.read16(pc)
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%04X {%s}", addr, instr.name, operand, instr.mode)
-			skip = 2
+			fmt.Fprintf(&line, "$%04X ", fake.operandAddr)
 		case addrModeABSX:
-			operand := c.read16(pc)
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%04X,X {%s}", addr, instr.name, operand, instr.mode)
-			skip = 2
+			fmt.Fprintf(&line, "$%04X,X ", fake.operandAddr)
 		case addrModeABSY:
-			operand := c.read16(pc)
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%04X,Y {%s}", addr, instr.name, operand, instr.mode)
-			skip = 2
+			fmt.Fprintf(&line, "$%04X,Y ", fake.operandAddr)
 		case addrModeIND:
-			operand := c.read16(pc)
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s ($%04X) {%s}", addr, instr.name, operand, instr.mode)
-			skip = 2
+			// address in this address mode is stored in ram,
+			// but fake doesn't write to the ram.
+			// for disassembly, we need just show the primary address
+			//
+			// INDX and INDY have the same behavior
+			primaryAddr := fake.read16(pcBeforeFetch)
+			fmt.Fprintf(&line, "($%04X) ", primaryAddr)
 		case addrModeINDX:
-			operand := c.read8(pc)
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s ($%02X,X) {%s}", addr, instr.name, operand, instr.mode)
-			skip = 1
+			primaryAddr := fake.read8(pcBeforeFetch)
+			fmt.Fprintf(&line, "($%02X,X) ", primaryAddr)
 		case addrModeINDY:
-			operand := c.read8(pc)
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s ($%02X),Y {%s}", addr, instr.name, operand, instr.mode)
-			skip = 1
+			primaryAddr := fake.read8(pcBeforeFetch)
+			fmt.Fprintf(&line, "($%02X),Y ", primaryAddr)
 		case addrModeREL:
-			operand := uint16(c.read8(pc))
-			pc++
-			if operand&0x80 > 0 {
-				operand |= 0xff00 // add leading 1 s to save the sign
-			}
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s $%02X {%s}", addr, instr.name, pc+operand, instr.mode)
-			skip = 1
+			fmt.Fprintf(&line, "$%02X ", fake.pc+fake.operandAddr)
 		case addrModeACC:
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s A {%s}", addr, instr.name, instr.mode)
+			fmt.Fprintf(&line, "A ")
 		case addrModeIMP:
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: %s {%s}", addr, instr.name, instr.mode)
+		}
+		fmt.Fprintf(&line, "{%s}", instr.mode)
+
+		// align the opcode and fetched bytes to the right
+		const maxLeftWidth = 27
+		for spaceCount := maxLeftWidth - line.Len(); spaceCount > 0; spaceCount-- {
+			line.WriteByte(' ')
 		}
 
-		addr = addr + 1 + skip
+		fmt.Fprintf(&line, "| %02x", opcode)
+		for i := 0; i < fetchedBytes; i++ {
+			addr := pcBeforeFetch + uint16(i)
+			fmt.Fprintf(&line, " %02x", fake.read8(addr))
+		}
+
+		disasm[uint16(addr)] = line.String()
+
+		fmt.Fprintf(logf, "%s\n", disasm[uint16(addr)])
+
+		addr += 1 + uint32(fetchedBytes)
 	}
 
 	return disasm
