@@ -80,21 +80,22 @@ type instr struct {
 }
 
 type CPU struct {
-	a            uint8
-	x            uint8
-	y            uint8
-	p            uint8
-	sp           uint8
-	pc           uint16
-	mem          ReadWriter
-	instrs       [0x100]instr
-	cycles       uint8
-	totalCycles  uint64
-	addrMode     addrMode
-	operandAddr  uint16
-	operandValue uint8
-	pageCrossed  bool
-	halted       bool
+	a           uint8
+	x           uint8
+	y           uint8
+	p           uint8
+	sp          uint8
+	pc          uint16
+	mem         ReadWriter
+	instrs      [0x100]instr
+	cycles      uint8
+	totalCycles uint64
+	addrMode    addrMode
+	// address     uint16
+	operandAddr uint16
+	// operandValue uint8
+	pageCrossed bool
+	halted      bool
 }
 
 func isSameSign(a, b uint8) bool {
@@ -209,7 +210,13 @@ func (c *CPU) NMI() {
 // maybe we need to start from the reset vector
 // and look for jmp-behave instructions
 // and disassemble the code from there
+//
+// maybe we need to use with fake ppu
+// because reading from ppu affects its internal state
 func (c *CPU) Disassemble() map[uint16]string {
+	// FIXME: remove this after fix with reading from ppu
+	return map[uint16]string{}
+
 	logf, err := os.Create("disasm.log")
 	if err != nil {
 		log.Fatalf("failed to create disasm.log: %v", err)
@@ -245,7 +252,7 @@ func (c *CPU) Disassemble() map[uint16]string {
 
 		switch instr.mode {
 		case addrModeIMM:
-			fmt.Fprintf(&line, "#$%02X ", fake.operandValue)
+			// fmt.Fprintf(&line, "#$%02X ", fake.operandValue)
 		case addrModeZP:
 			fmt.Fprintf(&line, "$%02X ", fake.operandAddr)
 		case addrModeZPX:
@@ -329,7 +336,7 @@ func (c *CPU) Tic() uint8 {
 
 	c.addrMode = 0
 	c.operandAddr = 0
-	c.operandValue = 0
+	// c.operandValue = 0
 	c.pageCrossed = false
 	return c.cycles
 }
@@ -340,44 +347,44 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 	c.addrMode = addrMode
 	c.pageCrossed = false
 	c.operandAddr = 0
-	c.operandValue = 0
+	// c.operandValue = 0
 
 	switch addrMode {
 	case addrModeIMM:
 		c.operandAddr = c.pc
 		c.pc++
-		c.operandValue = c.read8(c.operandAddr)
+		// c.operandValue = c.read8(c.operandAddr)
 		return 1
 
 	case addrModeZP:
 		c.operandAddr = uint16(c.read8(c.pc))
 		c.pc++
-		c.operandValue = c.read8(c.operandAddr)
+		// c.operandValue = c.read8(c.operandAddr)
 		return 1
 
 	case addrModeZPX:
 		c.operandAddr = uint16(c.read8(c.pc) + c.x)
 		c.pc++
-		c.operandValue = c.read8(c.operandAddr)
+		// c.operandValue = c.read8(c.operandAddr)
 		return 1
 
 	case addrModeZPY:
 		c.operandAddr = uint16(c.read8(c.pc) + c.y)
 		c.pc++
-		c.operandValue = c.read8(c.operandAddr)
+		// c.operandValue = c.read8(c.operandAddr)
 		return 1
 
 	case addrModeABS:
 		c.operandAddr = c.read16(c.pc)
 		c.pc += 2
-		c.operandValue = c.read8(c.operandAddr)
+		// c.operandValue = c.read8(c.operandAddr)
 		return 2
 
 	case addrModeABSX:
 		baseAddr := c.read16(c.pc)
 		c.pc += 2
 		c.operandAddr = baseAddr + uint16(c.x)
-		c.operandValue = c.read8(c.operandAddr)
+		// c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = isDiffPage(baseAddr, c.operandAddr)
 		return 2
 
@@ -385,7 +392,7 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 		baseAddr := c.read16(c.pc)
 		c.pc += 2
 		c.operandAddr = baseAddr + uint16(c.y)
-		c.operandValue = c.read8(c.operandAddr)
+		// c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = isDiffPage(baseAddr, c.operandAddr)
 		return 2
 
@@ -399,7 +406,7 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 			hi = (lo & 0xff00) | uint16((lo+1)&0x00ff)
 		}
 		c.operandAddr = uint16(c.read8(lo)) | uint16(c.read8(hi))<<8
-		c.operandValue = c.read8(c.operandAddr)
+		// c.operandValue = c.read8(c.operandAddr)
 		return 2
 
 	case addrModeINDX:
@@ -409,7 +416,7 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 		lo := uint16(c.read8(addr & 0x00ff))
 		hi := uint16(c.read8((addr + 1) & 0x00ff))
 		c.operandAddr = lo | hi<<8
-		c.operandValue = c.read8(c.operandAddr)
+		// c.operandValue = c.read8(c.operandAddr)
 		return 1
 
 	case addrModeINDY:
@@ -419,7 +426,7 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 		hi := uint16(c.read8((addr + 1) & 0x00ff))
 		addr = lo | hi<<8
 		c.operandAddr = addr + uint16(c.y)
-		c.operandValue = c.read8(c.operandAddr)
+		// c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = isDiffPage(addr, c.operandAddr)
 		return 1
 
@@ -432,10 +439,11 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 		return 1
 
 	case addrModeACC:
-		c.operandValue = c.a
+		// c.operandValue = c.a
 		return 0
 
 	case addrModeIMP:
+		c.operandAddr = c.pc
 		return 0
 	}
 
@@ -445,14 +453,15 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 }
 
 func (c *CPU) adc() {
-	r16 := uint16(c.a) + uint16(c.operandValue)
+	m := c.read8(c.operandAddr)
+	r16 := uint16(c.a) + uint16(m)
 	if c.getFlag(flagC) {
 		r16++
 	}
 	r8 := uint8(r16)
 	c.setFlag(flagC, r16 > 0xff)
 	c.setFlagsZN(r8)
-	c.setFlag(flagV, isSameSign(c.a, c.operandValue) && !isSameSign(c.a, r8))
+	c.setFlag(flagV, isSameSign(c.a, m) && !isSameSign(c.a, r8))
 	c.a = r8
 	if c.pageCrossed {
 		c.cycles++
@@ -460,7 +469,7 @@ func (c *CPU) adc() {
 }
 
 func (c *CPU) and() {
-	c.a &= c.operandValue
+	c.a &= c.read8(c.operandAddr)
 	c.setFlagsZN(c.a)
 	if c.pageCrossed {
 		c.cycles++
@@ -468,9 +477,15 @@ func (c *CPU) and() {
 }
 
 func (c *CPU) asl() {
-	c.setFlag(flagC, c.operandValue&0x80 > 0)
-	r8 := c.operandValue << 1
+	m := c.a
+	if c.addrMode != addrModeACC {
+		m = c.read8(c.operandAddr)
+	}
+
+	c.setFlag(flagC, m&0x80 > 0)
+	r8 := m << 1
 	c.setFlagsZN(r8)
+
 	if c.addrMode == addrModeACC {
 		c.a = r8
 	} else {
@@ -503,10 +518,11 @@ func (c *CPU) beq() {
 }
 
 func (c *CPU) bit() {
-	m := c.a & c.operandValue
-	c.setFlag(flagZ, m == 0)
-	c.setFlag(flagN, c.operandValue&flagN > 0)
-	c.setFlag(flagV, c.operandValue&flagV > 0)
+	m := c.read8(c.operandAddr)
+	r := c.a & m
+	c.setFlag(flagZ, r == 0)
+	c.setFlag(flagN, m&flagN > 0)
+	c.setFlag(flagV, m&flagV > 0)
 }
 
 func (c *CPU) bmi() {
@@ -554,27 +570,30 @@ func (c *CPU) clv() {
 }
 
 func (c *CPU) cmp() {
-	c.setFlag(flagC, c.a >= c.operandValue)
-	c.setFlagsZN(c.a - c.operandValue)
+	m := c.read8(c.operandAddr)
+	c.setFlag(flagC, c.a >= m)
+	c.setFlagsZN(c.a - m)
 	if c.pageCrossed {
 		c.cycles++
 	}
 }
 
 func (c *CPU) cpx() {
-	c.setFlag(flagC, c.x >= c.operandValue)
-	c.setFlagsZN(c.x - c.operandValue)
+	m := c.read8(c.operandAddr)
+	c.setFlag(flagC, c.x >= m)
+	c.setFlagsZN(c.x - m)
 }
 
 func (c *CPU) cpy() {
-	c.setFlag(flagC, c.y >= c.operandValue)
-	c.setFlagsZN(c.y - c.operandValue)
+	m := c.read8(c.operandAddr)
+	c.setFlag(flagC, c.y >= m)
+	c.setFlagsZN(c.y - m)
 }
 
 func (c *CPU) dec() {
-	r := c.operandValue - 1
-	c.setFlagsZN(r)
-	c.write8(c.operandAddr, r)
+	m := c.read8(c.operandAddr) - 1
+	c.setFlagsZN(m)
+	c.write8(c.operandAddr, m)
 }
 
 func (c *CPU) dex() {
@@ -588,7 +607,7 @@ func (c *CPU) dey() {
 }
 
 func (c *CPU) eor() {
-	c.a ^= c.operandValue
+	c.a ^= c.read8(c.operandAddr)
 	c.setFlagsZN(c.a)
 	if c.pageCrossed {
 		c.cycles++
@@ -596,7 +615,7 @@ func (c *CPU) eor() {
 }
 
 func (c *CPU) inc() {
-	r := c.operandValue + 1
+	r := c.read8(c.operandAddr) + 1
 	c.setFlagsZN(r)
 	c.write8(c.operandAddr, r)
 }
@@ -624,7 +643,7 @@ func (c *CPU) jsr() {
 }
 
 func (c *CPU) lda() {
-	c.a = c.operandValue
+	c.a = c.read8(c.operandAddr)
 	c.setFlagsZN(c.a)
 	if c.pageCrossed {
 		c.cycles++
@@ -632,7 +651,7 @@ func (c *CPU) lda() {
 }
 
 func (c *CPU) ldx() {
-	c.x = c.operandValue
+	c.x = c.read8(c.operandAddr)
 	c.setFlagsZN(c.x)
 	if c.pageCrossed {
 		c.cycles++
@@ -640,7 +659,7 @@ func (c *CPU) ldx() {
 }
 
 func (c *CPU) ldy() {
-	c.y = c.operandValue
+	c.y = c.read8(c.operandAddr)
 	c.setFlagsZN(c.y)
 	if c.pageCrossed {
 		c.cycles++
@@ -648,8 +667,13 @@ func (c *CPU) ldy() {
 }
 
 func (c *CPU) lsr() {
-	c.setFlag(flagC, c.operandValue&0x1 > 0)
-	r := c.operandValue >> 1
+	m := c.a
+	if c.addrMode != addrModeACC {
+		m = c.read8(c.operandAddr)
+	}
+
+	c.setFlag(flagC, m&0x1 > 0)
+	r := m >> 1
 	c.setFlagsZN(r)
 	if c.addrMode == addrModeACC {
 		c.a = r
@@ -666,7 +690,7 @@ func (c *CPU) nop() {
 }
 
 func (c *CPU) ora() {
-	c.a |= c.operandValue
+	c.a |= c.read8(c.operandAddr)
 	c.setFlagsZN(c.a)
 	if c.pageCrossed {
 		c.cycles++
@@ -691,12 +715,18 @@ func (c *CPU) plp() {
 }
 
 func (c *CPU) rol() {
-	r := c.operandValue << 1
+	m := c.a
+	if c.addrMode != addrModeACC {
+		m = c.read8(c.operandAddr)
+	}
+
+	r := m << 1
 	if c.getFlag(flagC) {
 		r |= 0x1
 	}
-	c.setFlag(flagC, c.operandValue&0x80 > 0)
+	c.setFlag(flagC, m&0x80 > 0)
 	c.setFlagsZN(r)
+
 	if c.addrMode == addrModeACC {
 		c.a = r
 	} else {
@@ -705,12 +735,18 @@ func (c *CPU) rol() {
 }
 
 func (c *CPU) ror() {
-	r := c.operandValue >> 1
+	m := c.a
+	if c.addrMode != addrModeACC {
+		m = c.read8(c.operandAddr)
+	}
+
+	r := m >> 1
 	if c.getFlag(flagC) {
 		r |= 0x80
 	}
-	c.setFlag(flagC, c.operandValue&0x1 > 0)
+	c.setFlag(flagC, m&0x1 > 0)
 	c.setFlagsZN(r)
+
 	if c.addrMode == addrModeACC {
 		c.a = r
 	} else {
@@ -729,8 +765,19 @@ func (c *CPU) rts() {
 }
 
 func (c *CPU) sbc() {
-	c.operandValue = ^c.operandValue
-	c.adc()
+	m := ^c.read8(c.operandAddr)
+	r16 := uint16(c.a) + uint16(m)
+	if c.getFlag(flagC) {
+		r16++
+	}
+	r8 := uint8(r16)
+	c.setFlag(flagC, r16 > 0xff)
+	c.setFlagsZN(r8)
+	c.setFlag(flagV, isSameSign(c.a, m) && !isSameSign(c.a, r8))
+	c.a = r8
+	if c.pageCrossed {
+		c.cycles++
+	}
 }
 
 func (c *CPU) sec() {
@@ -787,8 +834,9 @@ func (c *CPU) tya() {
 }
 
 func (c *CPU) lax() {
-	c.a = c.operandValue
-	c.x = c.operandValue
+	m := c.read8(c.operandAddr)
+	c.a = m
+	c.x = m
 	c.setFlagsZN(c.a)
 	if c.pageCrossed {
 		c.cycles++
@@ -800,30 +848,30 @@ func (c *CPU) sax() {
 }
 
 func (c *CPU) dcp() {
-	c.operandValue--
-	c.write8(c.operandAddr, c.operandValue)
+	c.write8(c.operandAddr, c.read8(c.operandAddr)-1)
 	c.pageCrossed = false
 	c.cmp()
 }
 
 func (c *CPU) isc() {
-	c.operandValue++
-	c.write8(c.operandAddr, c.operandValue)
+	c.write8(c.operandAddr, c.read8(c.operandAddr)+1)
 	c.pageCrossed = false
 	c.sbc()
 }
 
 func (c *CPU) slo() {
-	c.setFlag(flagC, c.operandValue&0x80 > 0)
-	r := c.operandValue << 1
+	m := c.read8(c.operandAddr)
+	c.setFlag(flagC, m&0x80 > 0)
+	r := m << 1
 	c.write8(c.operandAddr, r)
 	c.a |= r
 	c.setFlagsZN(c.a)
 }
 
 func (c *CPU) rla() {
-	carry := c.operandValue&0x80 > 0
-	r := c.operandValue << 1
+	m := c.read8(c.operandAddr)
+	carry := m&0x80 > 0
+	r := m << 1
 	if c.getFlag(flagC) {
 		r |= 0x1
 	}
@@ -834,21 +882,22 @@ func (c *CPU) rla() {
 }
 
 func (c *CPU) sre() {
-	c.setFlag(flagC, c.operandValue&0x1 > 0)
-	r := c.operandValue >> 1
+	m := c.read8(c.operandAddr)
+	c.setFlag(flagC, m&0x1 > 0)
+	r := m >> 1
 	c.write8(c.operandAddr, r)
 	c.a ^= r
 	c.setFlagsZN(c.a)
 }
 
 func (c *CPU) rra() {
-	r := c.operandValue >> 1
+	m := c.read8(c.operandAddr)
+	r := m >> 1
 	if c.getFlag(flagC) {
 		r |= 0x80
 	}
-	c.setFlag(flagC, c.operandValue&0x1 > 0)
-	c.operandValue = r
-	c.write8(c.operandAddr, c.operandValue)
+	c.setFlag(flagC, m&0x1 > 0)
+	c.write8(c.operandAddr, r)
 	c.pageCrossed = false
 	c.adc()
 }
@@ -858,20 +907,20 @@ func (c *CPU) hlt() {
 }
 
 func (c *CPU) anc() {
-	c.a &= c.operandValue
+	c.a &= c.read8(c.operandAddr)
 	c.setFlag(flagC, c.a&0x80 > 0)
 	c.setFlagsZN(c.a)
 }
 
 func (c *CPU) alr() {
-	c.a &= c.operandValue
+	c.a &= c.read8(c.operandAddr)
 	c.setFlag(flagC, c.a&0x1 > 0)
 	c.a >>= 1
 	c.setFlagsZN(c.a)
 }
 
 func (c *CPU) las() {
-	r := c.operandValue & c.sp
+	r := c.read8(c.operandAddr) & c.sp
 	c.a = r
 	c.x = r
 	c.sp = r
