@@ -1,14 +1,11 @@
 package nes
 
 import (
-	"fmt"
 	"log"
-	"os"
-	"strings"
 )
 
 const (
-	stackStartAddr = uint16(0x100)
+	stackStartAddr uint16 = 0x100
 )
 
 const (
@@ -91,9 +88,7 @@ type CPU struct {
 	cycles      uint8
 	totalCycles uint64
 	addrMode    addrMode
-	// address     uint16
 	operandAddr uint16
-	// operandValue uint8
 	pageCrossed bool
 	halted      bool
 }
@@ -203,112 +198,6 @@ func (c *CPU) NMI() {
 	c.cycles += 7
 }
 
-// Disassemble returns a map of addresses and their corresponding instructions
-// from 0x0000 to 0xffff
-//
-// FIXME: traverse the program is not correct
-// maybe we need to start from the reset vector
-// and look for jmp-behave instructions
-// and disassemble the code from there
-//
-// maybe we need to use with fake ppu
-// because reading from ppu affects its internal state
-func (c *CPU) Disassemble() map[uint16]string {
-	// FIXME: remove this after fix with reading from ppu
-	return map[uint16]string{}
-
-	logf, err := os.Create("disasm.log")
-	if err != nil {
-		log.Fatalf("failed to create disasm.log: %v", err)
-	}
-	defer logf.Close()
-
-	disasm := make(map[uint16]string, 0x10000)
-
-	// this cpu shares the same memory with the bus,
-	// but we dont gonna change the memory content
-	fake := NewCPU(c.mem)
-	fake.Reset()
-
-	addr := uint32(fake.pc)
-	for addr <= 0xffff {
-		fake.pc = uint16(addr)
-		opcode := fake.read8(fake.pc)
-
-		instr := fake.instrs[opcode]
-
-		if instr.fn == nil {
-			disasm[uint16(addr)] = fmt.Sprintf("$%04X: ???", addr)
-			addr++
-			continue
-		}
-
-		var line strings.Builder
-		fmt.Fprintf(&line, "$%04X: %s ", fake.pc, instr.name)
-
-		fake.pc++
-		pcBeforeFetch := fake.pc
-		fetchedBytes := fake.fetch(instr.mode)
-
-		switch instr.mode {
-		case addrModeIMM:
-			// fmt.Fprintf(&line, "#$%02X ", fake.operandValue)
-		case addrModeZP:
-			fmt.Fprintf(&line, "$%02X ", fake.operandAddr)
-		case addrModeZPX:
-			fmt.Fprintf(&line, "$%02X,X ", fake.operandAddr)
-		case addrModeZPY:
-			fmt.Fprintf(&line, "$%02X,Y ", fake.operandAddr)
-		case addrModeABS:
-			fmt.Fprintf(&line, "$%04X ", fake.operandAddr)
-		case addrModeABSX:
-			fmt.Fprintf(&line, "$%04X,X ", fake.operandAddr)
-		case addrModeABSY:
-			fmt.Fprintf(&line, "$%04X,Y ", fake.operandAddr)
-		case addrModeIND:
-			// address in this address mode is stored in ram,
-			// but fake doesn't write to the ram.
-			// for disassembly, we need just show the primary address
-			//
-			// INDX and INDY have the same behavior
-			primaryAddr := fake.read16(pcBeforeFetch)
-			fmt.Fprintf(&line, "($%04X) ", primaryAddr)
-		case addrModeINDX:
-			primaryAddr := fake.read8(pcBeforeFetch)
-			fmt.Fprintf(&line, "($%02X,X) ", primaryAddr)
-		case addrModeINDY:
-			primaryAddr := fake.read8(pcBeforeFetch)
-			fmt.Fprintf(&line, "($%02X),Y ", primaryAddr)
-		case addrModeREL:
-			fmt.Fprintf(&line, "$%02X ", fake.pc+fake.operandAddr)
-		case addrModeACC:
-			fmt.Fprintf(&line, "A ")
-		case addrModeIMP:
-		}
-		fmt.Fprintf(&line, "{%s}", instr.mode)
-
-		// align the opcode and fetched bytes to the right
-		const maxLeftWidth = 27
-		for spaceCount := maxLeftWidth - line.Len(); spaceCount > 0; spaceCount-- {
-			line.WriteByte(' ')
-		}
-
-		fmt.Fprintf(&line, "| %02x", opcode)
-		for i := 0; i < fetchedBytes; i++ {
-			addr := pcBeforeFetch + uint16(i)
-			fmt.Fprintf(&line, " %02x", fake.read8(addr))
-		}
-
-		disasm[uint16(addr)] = line.String()
-
-		fmt.Fprintf(logf, "%s\n", disasm[uint16(addr)])
-
-		addr += 1 + uint32(fetchedBytes)
-	}
-
-	return disasm
-}
-
 // Tic executes one CPU cycle and
 // returns the number of cycles left for the current operation
 func (c *CPU) Tic() uint8 {
@@ -329,72 +218,55 @@ func (c *CPU) Tic() uint8 {
 		log.Printf("unsupported opcode %02X. PC: %04X. halting...\n", opcode, c.pc)
 		return 0
 	}
-	_ = c.fetch(instr.mode)
+	c.fetch(instr.mode)
 	instr.fn()
 	c.cycles += instr.cycles
 	c.totalCycles += uint64(c.cycles)
 
 	c.addrMode = 0
 	c.operandAddr = 0
-	// c.operandValue = 0
 	c.pageCrossed = false
 	return c.cycles
 }
 
 // fetch fetches the operand for the current instruction
-// and returns the number of bytes read
-func (c *CPU) fetch(addrMode addrMode) (n int) {
+func (c *CPU) fetch(addrMode addrMode) {
 	c.addrMode = addrMode
 	c.pageCrossed = false
 	c.operandAddr = 0
-	// c.operandValue = 0
 
 	switch addrMode {
 	case addrModeIMM:
 		c.operandAddr = c.pc
 		c.pc++
-		// c.operandValue = c.read8(c.operandAddr)
-		return 1
 
 	case addrModeZP:
 		c.operandAddr = uint16(c.read8(c.pc))
 		c.pc++
-		// c.operandValue = c.read8(c.operandAddr)
-		return 1
 
 	case addrModeZPX:
 		c.operandAddr = uint16(c.read8(c.pc) + c.x)
 		c.pc++
-		// c.operandValue = c.read8(c.operandAddr)
-		return 1
 
 	case addrModeZPY:
 		c.operandAddr = uint16(c.read8(c.pc) + c.y)
 		c.pc++
-		// c.operandValue = c.read8(c.operandAddr)
-		return 1
 
 	case addrModeABS:
 		c.operandAddr = c.read16(c.pc)
 		c.pc += 2
-		// c.operandValue = c.read8(c.operandAddr)
-		return 2
 
 	case addrModeABSX:
 		baseAddr := c.read16(c.pc)
 		c.pc += 2
 		c.operandAddr = baseAddr + uint16(c.x)
-		// c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = isDiffPage(baseAddr, c.operandAddr)
-		return 2
 
 	case addrModeABSY:
 		baseAddr := c.read16(c.pc)
 		c.pc += 2
 		c.operandAddr = baseAddr + uint16(c.y)
-		// c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = isDiffPage(baseAddr, c.operandAddr)
-		return 2
 
 	case addrModeIND:
 		addr := c.read16(c.pc)
@@ -406,8 +278,6 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 			hi = (lo & 0xff00) | uint16((lo+1)&0x00ff)
 		}
 		c.operandAddr = uint16(c.read8(lo)) | uint16(c.read8(hi))<<8
-		// c.operandValue = c.read8(c.operandAddr)
-		return 2
 
 	case addrModeINDX:
 		addr := uint16(c.read8(c.pc))
@@ -416,8 +286,6 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 		lo := uint16(c.read8(addr & 0x00ff))
 		hi := uint16(c.read8((addr + 1) & 0x00ff))
 		c.operandAddr = lo | hi<<8
-		// c.operandValue = c.read8(c.operandAddr)
-		return 1
 
 	case addrModeINDY:
 		addr := uint16(c.read8(c.pc))
@@ -426,9 +294,7 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 		hi := uint16(c.read8((addr + 1) & 0x00ff))
 		addr = lo | hi<<8
 		c.operandAddr = addr + uint16(c.y)
-		// c.operandValue = c.read8(c.operandAddr)
 		c.pageCrossed = isDiffPage(addr, c.operandAddr)
-		return 1
 
 	case addrModeREL:
 		c.operandAddr = uint16(c.read8(c.pc))
@@ -436,20 +302,16 @@ func (c *CPU) fetch(addrMode addrMode) (n int) {
 		if c.operandAddr&0x80 > 0 {
 			c.operandAddr |= 0xff00 // add leading 1 s to save the sign
 		}
-		return 1
 
 	case addrModeACC:
-		// c.operandValue = c.a
-		return 0
 
 	case addrModeIMP:
 		c.operandAddr = c.pc
-		return 0
-	}
 
-	c.hlt()
-	log.Printf("unsupported addressing mode %d. PC: %04X. halting...\n", addrMode, c.pc)
-	return 0
+	default:
+		c.hlt()
+		log.Printf("unsupported addressing mode %d. PC: %04X. halting...\n", addrMode, c.pc)
+	}
 }
 
 func (c *CPU) adc() {
