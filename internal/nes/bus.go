@@ -95,7 +95,7 @@ func (b *Bus) GetBgTileById(palette, index uint8) *image.RGBA {
 }
 
 func (b *Bus) Disassemble() map[uint16]string {
-	return b.cpu.Disassemble()
+	return map[uint16]string{}
 }
 
 func (b *Bus) Tic() {

@@ -5,43 +5,44 @@ import (
 	"image/color"
 )
 
+const (
+	// CTRL
+	ctrlNametable   uint8 = 1 << 0 // nametable address. 0: $2000; 1: $2400; 2: $2800; 3: $2C00
+	ctrlVramInc     uint8 = 1 << 2 // vram address increment per CPU read/write of PPUDATA
+	ctrlSprTable    uint8 = 1 << 3 // sprite pattern table address for 8x8 sprites. 0: $0000; 1: $1000
+	ctrlBgTable     uint8 = 1 << 4 // background pattern table address. 0: $0000; 1: $1000
+	ctrlSprSize     uint8 = 1 << 5 // sprite size. 0: 8x8; 1: 8x16
+	ctrlMasterSlave uint8 = 1 << 6 // PPU master/slave select
+	ctrlNmiEnable   uint8 = 1 << 7 // generate an NMI at the start of the vertical blanking interval
+
+	// MASK
+	maskGray uint8 = 1 << 0 // grayscale
+	maskBgL  uint8 = 1 << 1 // show background in leftmost 8 pixels of screen
+	maskSprL uint8 = 1 << 2 // show sprites in leftmost 8 pixels of screen
+	maskBg   uint8 = 1 << 3 // show background
+	maskSpr  uint8 = 1 << 4 // show sprites
+	maskR    uint8 = 1 << 5 // emphasis red
+	maskG    uint8 = 1 << 6 // emphasis green
+	maskB    uint8 = 1 << 7 // emphasis blue
+
+	// STATUS
+	statusSprOverflow   uint8 = 1 << 5 // sprite overflow
+	statusSprZeroHit    uint8 = 1 << 6 // sprite 0 hit
+	statusVerticalBlank uint8 = 1 << 7 // vertical blank has started
+)
+
 type PPU struct {
-	paletteRam    [32]uint8      // 32 bytes of palette RAM
-	nametablesRam [2][1024]uint8 // 2 nametables, 1024 bytes each
+	palette   [32]uint8      // 32 bytes of palette RAM
+	nametable [2][1024]uint8 // 2 nametables, 1024 bytes each
 
 	screen        *image.RGBA
 	frameComplete bool
 	cycle         int
 	scanline      int
 
-	ctrl struct {
-		nametableX  uint8 // nametable address
-		nametableY  uint8 // nametable address
-		vramInc     uint8 // vram address increment per CPU read/write of PPUDATA
-		sprTable    uint8 // sprite pattern table address for 8x8 sprites
-		bgTable     uint8 // background pattern table address
-		sprSize     uint8 // sprite size
-		masterSlave uint8 // PPU master/slave select
-		nmiEnable   uint8 // generate an NMI at the start of the vertical blanking interval
-	}
-
-	mask struct {
-		grayscale uint8 // grayscale
-		bgLeft    uint8 // show background in leftmost 8 pixels of screen
-		sprLeft   uint8 // show sprites in leftmost 8 pixels of screen
-		bg        uint8 // show background
-		spr       uint8 // show sprites
-		emphR     uint8 // emphasis red
-		emphG     uint8 // emphasis green
-		emphB     uint8 // emphasis blue
-	}
-
-	status struct {
-		unused        uint8 // unused
-		sprOverflow   uint8 // sprite overflow
-		sprZeroHit    uint8 // sprite 0 hit
-		verticalBlank uint8 // vertical blank has started
-	}
+	ctrl   uint8 // PPUCTRL
+	mask   uint8 // PPUMASK
+	status uint8 // PPUSTATUS
 
 	mem ReadWriter
 
@@ -62,37 +63,52 @@ type PPU struct {
 
 func NewPPU(mem ReadWriter) *PPU {
 	p := &PPU{
-		screen:     image.NewRGBA(image.Rect(0, 0, 256, 240)),
-		mem:        mem,
-		paletteRam: [32]uint8{},
+		screen:    image.NewRGBA(image.Rect(0, 0, 256, 240)),
+		mem:       mem,
+		palette:   [32]uint8{},
+		nametable: [2][1024]uint8{},
 	}
 	p.Reset()
 	return p
 }
 
 func (p *PPU) Reset() {
-	p.writeCtrl(0)
-	p.writeMask(0)
-	for i := 0; i < len(p.paletteRam); i++ {
-		p.paletteRam[i] = 0
-	}
-	p.bufferedData = 0
-	p.cycle = 0
-	p.scanline = 0
-	for i := 0; i < len(p.screen.Pix); i++ {
-		p.screen.Pix[i] = 0
-	}
 }
 
-func (p PPU) readRegister(addr uint16) uint8 {
+func (p *PPU) readNametable(index uint8, addr uint16) uint8 {
+	return p.nametable[index][addr]
+}
+
+func (p *PPU) writeNametable(index uint8, addr uint16, data uint8) {
+	p.nametable[index][addr] = data
+}
+
+func (p *PPU) readPalette(addr uint16) uint8 {
+	addr &= 0x1f
+	if addr == 0x10 || addr == 0x14 || addr == 0x18 || addr == 0x1c {
+		addr -= 0x10
+	}
+	return p.palette[addr]
+}
+
+func (p *PPU) writePalette(addr uint16, data uint8) {
+	addr &= 0x1f
+	if addr == 0x10 || addr == 0x14 || addr == 0x18 || addr == 0x1c {
+		addr -= 0x10
+	}
+	p.palette[addr] = data
+}
+
+func (p *PPU) readRegister(addr uint16) uint8 {
 	switch addr {
-	case 0x2:
-		data := p.readStatus()
-		p.status.verticalBlank = 0
-		data |= p.bufferedData & 0x1F // 3 firts bits are unused
+	case 0x2: // PPUSTATUS
+		data := p.status
+		p.status &= ^statusVerticalBlank // clear vblank flag
+		data |= p.bufferedData & 0x1f
 		p.w = 0
 		return data
-	case 0x7:
+
+	case 0x7: // PPUDATA
 		// emulate 1 cycle delay
 		data := p.bufferedData
 		p.bufferedData = p.mem.Read8(p.v)
@@ -102,7 +118,7 @@ func (p PPU) readRegister(addr uint16) uint8 {
 			data = p.bufferedData
 		}
 
-		if p.ctrl.vramInc == 0 {
+		if p.ctrl&ctrlVramInc == 0 {
 			p.v++
 		} else {
 			p.v += 32
@@ -114,13 +130,15 @@ func (p PPU) readRegister(addr uint16) uint8 {
 
 func (p *PPU) writeRegister(addr uint16, data uint8) {
 	switch addr {
-	case 0x0:
-		p.writeCtrl(data)
+	case 0x0: // PPUCTRL
+		p.ctrl = data
 		// t: ....BA.. ........ = d: ......BA
 		p.t = p.t&0xF3FF | uint16(data&0x3)<<10
-	case 0x1:
-		p.writeMask(data)
-	case 0x5:
+
+	case 0x1: // PPUMASK
+		p.mask = data
+
+	case 0x5: // PPUSCROLL
 		if p.w == 0 {
 			// t: ....... ...ABCDE <- d: ABCDE...
 			// x:              FGH <- d: .....FGH
@@ -134,7 +152,8 @@ func (p *PPU) writeRegister(addr uint16, data uint8) {
 			p.t = p.t&0x8C1F | uint16(data&0x7)<<12 | uint16(data&0xF8)<<2
 			p.w = 0
 		}
-	case 0x6:
+
+	case 0x6: // PPUADDR
 		if p.w == 0 {
 			// t: .CDEFGH ........ <- d: ..CDEFGH
 			//    <unused>         <- d: AB......
@@ -151,9 +170,10 @@ func (p *PPU) writeRegister(addr uint16, data uint8) {
 			p.v = p.t
 			p.w = 0
 		}
-	case 0x7:
+
+	case 0x7: // PPUDATA
 		p.mem.Write8(p.v, data)
-		if p.ctrl.vramInc == 0 {
+		if p.ctrl&ctrlVramInc == 0 {
 			p.v++
 		} else {
 			p.v += 32
@@ -161,69 +181,22 @@ func (p *PPU) writeRegister(addr uint16, data uint8) {
 	}
 }
 
-func (p *PPU) writeCtrl(data uint8) {
-	p.ctrl.nametableX = data >> 0 & 1
-	p.ctrl.nametableY = data >> 1 & 1
-	p.ctrl.vramInc = data >> 2 & 1
-	p.ctrl.sprTable = data >> 3 & 1
-	p.ctrl.bgTable = data >> 4 & 1
-	p.ctrl.sprSize = data >> 5 & 1
-	p.ctrl.masterSlave = data >> 6 & 1
-	p.ctrl.nmiEnable = data >> 7 & 1
-}
-
-func (p *PPU) writeMask(data uint8) {
-	p.mask.grayscale = data >> 0 & 1
-	p.mask.bgLeft = data >> 1 & 1
-	p.mask.sprLeft = data >> 2 & 1
-	p.mask.bg = data >> 3 & 1
-	p.mask.spr = data >> 4 & 1
-	p.mask.emphR = data >> 5 & 1
-	p.mask.emphG = data >> 6 & 1
-	p.mask.emphB = data >> 7 & 1
-}
-
-func (p *PPU) readStatus() uint8 {
-	var status uint8
-	status |= p.status.unused
-	status |= p.status.sprOverflow << 5
-	status |= p.status.sprZeroHit << 6
-	status |= p.status.verticalBlank << 7
-	return status
-}
-
-func (p *PPU) readNametable(index uint8, addr uint16) uint8 {
-	return p.nametablesRam[index][addr]
-}
-
-func (p *PPU) writeNametable(index uint8, addr uint16, data uint8) {
-	p.nametablesRam[index][addr] = data
-}
-
-func (p *PPU) readPalette(addr uint16) uint8 {
-	addr &= 0x1F
-	if addr == 0x10 || addr == 0x14 || addr == 0x18 || addr == 0x1C {
-		addr -= 0x10
-	}
-	return p.paletteRam[addr]
-}
-
-func (p *PPU) writePalette(addr uint16, data uint8) {
-	addr &= 0x1F
-	if addr == 0x10 || addr == 0x14 || addr == 0x18 || addr == 0x1C {
-		addr -= 0x10
-	}
-	p.paletteRam[addr] = data
+func (p *PPU) renderingEnabled() bool {
+	return p.mask&(maskBg|maskSpr) != 0
 }
 
 func (p *PPU) Tic() {
-	// TODO: how to increment cycle and scanline?
+	// defer func() {
+	// 	fmt.Printf("scanline: %d, cycle: %d v: %04X t: %04X tile_id: %02X attr: %02X lsb: %02X msb: %02X\n",
+	// 		p.scanline, p.cycle, p.v, p.t, p.bgNextTileId, p.bgNextAttr, p.bgNextTileLsb, p.bgNextTileMsb)
+	// }()
 
 	if p.scanline >= -1 && p.scanline < 240 {
 		if p.scanline == -1 && p.cycle == 1 {
-			p.status.verticalBlank = 0
+			p.status &= ^statusVerticalBlank // clear vblank flag
 		}
 
+		// TODO: move this to a separate function (fetchBackground)
 		if (p.cycle >= 2 && p.cycle < 258) || (p.cycle >= 321 && p.cycle < 338) {
 			switch (p.cycle - 1) % 8 {
 			case 0:
@@ -243,47 +216,56 @@ func (p *PPU) Tic() {
 				p.bgNextAttr &= 0x3
 
 			case 4:
-				p.bgNextTileLsb = p.mem.Read8(uint16(p.ctrl.bgTable)<<12 + uint16(p.bgNextTileId)<<4 + uint16(p.v&0x7000)>>12)
+				baseAddr := uint16(0)
+				if p.ctrl&ctrlBgTable != 0 {
+					baseAddr = 0x1000
+				}
+				p.bgNextTileLsb = p.mem.Read8(baseAddr + uint16(p.bgNextTileId)<<4 + uint16(p.v&0x7000)>>12)
 			case 6:
-				p.bgNextTileMsb = p.mem.Read8(uint16(p.ctrl.bgTable)<<12 + uint16(p.bgNextTileId)<<4 + uint16(p.v&0x7000)>>12 + 8)
+				baseAddr := uint16(0)
+				if p.ctrl&ctrlBgTable != 0 {
+					baseAddr = 0x1000
+				}
+				p.bgNextTileMsb = p.mem.Read8(baseAddr + uint16(p.bgNextTileId)<<4 + uint16(p.v&0x7000)>>12 + 8)
 			case 7:
-				if p.mask.bg != 0 || p.mask.spr != 0 {
+				if p.renderingEnabled() {
 					p.incrementX()
 				}
 			}
 		}
 		if p.cycle == 256 {
-			if p.mask.bg != 0 || p.mask.spr != 0 {
+			if p.renderingEnabled() {
 				p.incrementY()
 			}
 		}
 
 		if p.cycle == 257 {
-			if p.mask.bg != 0 || p.mask.spr != 0 {
-				p.copyX()
+			if p.renderingEnabled() {
+				p.transferX()
 			}
 		}
 
 		if p.scanline == -1 && p.cycle >= 280 && p.cycle < 305 {
-			if p.mask.bg != 0 || p.mask.spr != 0 {
-				p.copyY()
+			if p.renderingEnabled() {
+				p.transferY()
 			}
 		}
 	}
 
 	if p.scanline == 241 && p.cycle == 1 {
-		p.status.verticalBlank = 1
-		if p.ctrl.nmiEnable == 1 {
+		p.status |= statusVerticalBlank
+		if p.ctrl&ctrlNmiEnable != 0 {
 			p.nmi = true
 		}
 	}
 
 	if p.scanline == -1 && p.cycle == 1 {
-		p.status.verticalBlank = 0
+		p.status &= ^statusSprOverflow
 	}
 
 	// p.screen.Set(p.cycle-1, p.scanline, p.GetColorFromPalette(0, ))
 
+	// TODO: add odd frame skip
 	p.cycle++
 	if p.cycle >= 341 {
 		p.cycle = 0
@@ -297,45 +279,40 @@ func (p *PPU) Tic() {
 
 type tile [8][8]uint8
 
-func (p *PPU) GetBgTileById(palette, index uint8) *image.RGBA {
-	addr := uint16(index) * 16
-	if p.ctrl.bgTable == 1 {
-		addr += 0x1000
-	}
+func (p *PPU) getTileById(tableId, tileId uint8) tile {
+	addr := uint16(tableId)<<12 | uint16(tileId)<<4
 
-	t := tile{}
-
+	var t tile
 	for i := 0; i < 8; i++ {
-		lsb := p.mem.Read8(addr)
-		t[i][7] = uint8(lsb >> 0 & 1)
-		t[i][6] = uint8(lsb >> 1 & 1)
-		t[i][5] = uint8(lsb >> 2 & 1)
-		t[i][4] = uint8(lsb >> 3 & 1)
-		t[i][3] = uint8(lsb >> 4 & 1)
-		t[i][2] = uint8(lsb >> 5 & 1)
-		t[i][1] = uint8(lsb >> 6 & 1)
-		t[i][0] = uint8(lsb >> 7 & 1)
+		lsb := p.mem.Read8(addr + 0)
+		msb := p.mem.Read8(addr + 8)
+
+		t[i][7] = (lsb>>0&1)<<0 | (msb>>0&1)<<1
+		t[i][6] = (lsb>>1&1)<<0 | (msb>>1&1)<<1
+		t[i][5] = (lsb>>2&1)<<0 | (msb>>2&1)<<1
+		t[i][4] = (lsb>>3&1)<<0 | (msb>>3&1)<<1
+		t[i][3] = (lsb>>4&1)<<0 | (msb>>4&1)<<1
+		t[i][2] = (lsb>>5&1)<<0 | (msb>>5&1)<<1
+		t[i][1] = (lsb>>6&1)<<0 | (msb>>6&1)<<1
+		t[i][0] = (lsb>>7&1)<<0 | (msb>>7&1)<<1
+
 		addr++
 	}
+	return t
+}
 
-	for i := 0; i < 8; i++ {
-		msb := p.mem.Read8(addr)
-		t[i][7] |= uint8(msb >> 0 & 1 << 1)
-		t[i][6] |= uint8(msb >> 1 & 1 << 1)
-		t[i][5] |= uint8(msb >> 2 & 1 << 1)
-		t[i][4] |= uint8(msb >> 3 & 1 << 1)
-		t[i][3] |= uint8(msb >> 4 & 1 << 1)
-		t[i][2] |= uint8(msb >> 5 & 1 << 1)
-		t[i][1] |= uint8(msb >> 6 & 1 << 1)
-		t[i][0] |= uint8(msb >> 7 & 1 << 1)
-		addr++
+func (p *PPU) GetBgTileById(palette, tileId uint8) *image.RGBA {
+	tableId := uint8(0)
+	if p.ctrl&ctrlBgTable != 0 {
+		tableId = 1
 	}
+	t := p.getTileById(tableId, tileId)
 
 	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
 	for y := 0; y < 8; y++ {
 		for x := 0; x < 8; x++ {
 			color := p.GetColorFromPalette(palette, t[y][x])
-			img.Set(x, y, color)
+			img.SetRGBA(x, y, color)
 		}
 	}
 
@@ -347,48 +324,14 @@ func (p *PPU) GetPatternTable(palette, index uint8) *image.RGBA {
 		return nil
 	}
 
-	addr := uint16(index) * 0x1000
-	tiles := [256]tile{}
-
-	for i := 0; i < 256; i++ {
-		var t tile
-
-		for j := 0; j < 8; j++ {
-			lsb := p.mem.Read8(addr)
-			t[j][7] = uint8(lsb >> 0 & 1)
-			t[j][6] = uint8(lsb >> 1 & 1)
-			t[j][5] = uint8(lsb >> 2 & 1)
-			t[j][4] = uint8(lsb >> 3 & 1)
-			t[j][3] = uint8(lsb >> 4 & 1)
-			t[j][2] = uint8(lsb >> 5 & 1)
-			t[j][1] = uint8(lsb >> 6 & 1)
-			t[j][0] = uint8(lsb >> 7 & 1)
-			addr++
-		}
-
-		for j := 0; j < 8; j++ {
-			msb := p.mem.Read8(addr)
-			t[j][7] |= uint8(msb >> 0 & 1 << 1)
-			t[j][6] |= uint8(msb >> 1 & 1 << 1)
-			t[j][5] |= uint8(msb >> 2 & 1 << 1)
-			t[j][4] |= uint8(msb >> 3 & 1 << 1)
-			t[j][3] |= uint8(msb >> 4 & 1 << 1)
-			t[j][2] |= uint8(msb >> 5 & 1 << 1)
-			t[j][1] |= uint8(msb >> 6 & 1 << 1)
-			t[j][0] |= uint8(msb >> 7 & 1 << 1)
-			addr++
-		}
-
-		tiles[i] = t
-	}
-
 	img := image.NewRGBA(image.Rect(0, 0, 128, 128))
 	tileSize := 8
 	for i := 0; i < 256; i++ {
+		t := p.getTileById(index, uint8(i))
 		for y := 0; y < 8; y++ {
 			for x := 0; x < 8; x++ {
-				color := p.GetColorFromPalette(palette, tiles[i][y][x])
-				img.Set(x+i%16*tileSize, y+i/16*tileSize, color)
+				color := p.GetColorFromPalette(palette, t[y][x])
+				img.SetRGBA(x+i%16*tileSize, y+i/16*tileSize, color)
 			}
 		}
 	}
@@ -402,14 +345,20 @@ func (p *PPU) GetColorFromPalette(palette, pixel uint8) color.RGBA {
 }
 
 func (p *PPU) incrementX() {
-	if p.v&0x001F == 31 { // if coarse X == 31
-		p.v &= ^uint16(0x001F) // coarse X = 0
-		p.v ^= 0x0400          // switch horizontal nametable
+	const (
+		coarseMask uint16 = 0x001f
+		ntMask     uint16 = 0x0400
+	)
+
+	if p.v&coarseMask == coarseMask { // if coarse X == 31
+		p.v &= ^coarseMask // coarse X = 0
+		p.v ^= ntMask      // switch horizontal nametable
 	} else {
 		p.v += 1 // increment coarse X
 	}
 }
 
+// TODO: add consts for these magic numbers
 func (p *PPU) incrementY() {
 	if p.v&0x7000 != 0x7000 { // if fine Y < 7
 		p.v += 0x1000 // increment fine Y
@@ -428,10 +377,22 @@ func (p *PPU) incrementY() {
 	}
 }
 
-func (ppu *PPU) copyX() {
-	ppu.v = ppu.v&0xFBE0 | ppu.t&0x041F
+func (ppu *PPU) transferX() {
+	const (
+		xMask uint16 = 0x041f
+		xClr  uint16 = ^xMask
+	)
+	//                           0000100 00011111 = xMask
+	// v: ....A.. ...BCDEF <- t: ....A.. ...BCDEF
+	ppu.v = ppu.v&xClr | ppu.t&xMask
 }
 
-func (ppu *PPU) copyY() {
-	ppu.v = ppu.v&0x841F | ppu.t&0x7BE0
+func (ppu *PPU) transferY() {
+	const (
+		yMask uint16 = 0x7be0
+		yClr  uint16 = ^yMask
+	)
+	//                          01111011 11100000 = yMask
+	// v: GHIA.BC DEF..... <- t: GHIA.BC DEF.....
+	ppu.v = ppu.v&yClr | ppu.t&yMask
 }

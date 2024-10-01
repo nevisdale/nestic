@@ -3,7 +3,6 @@ module github.com/nevisdale/nestic
 go 1.23
 
 require (
-	github.com/goccy/go-json v0.10.3
 	github.com/hajimehoshi/ebiten/v2 v2.7.8
 	github.com/pkg/profile v1.7.0
 	github.com/stretchr/testify v1.9.0
