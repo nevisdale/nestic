@@ -4,6 +4,11 @@ import (
 	"log"
 )
 
+type ReadWriter interface {
+	Read8(addr uint16) uint8
+	Write8(addr uint16, data uint8)
+}
+
 const (
 	stackStartAddr uint16 = 0x100
 )
