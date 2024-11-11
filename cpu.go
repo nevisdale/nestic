@@ -1,4 +1,4 @@
-package nes
+package nestic
 
 import (
 	"log"
